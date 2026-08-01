@@ -1,7 +1,9 @@
-import { memo, useState, type MouseEvent } from "react";
+import { memo, type MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaPlus, FaCheck } from "react-icons/fa6";
 import type { MediaItem } from "../../data/mockData";
+import { toggleMyList, useIsInList } from "../../store/myList";
+import { showToast } from "../../utils/toast";
 import playIcon from "../../assets/icon-play.svg";
 
 interface MovieCardProps {
@@ -26,7 +28,7 @@ export default memo(function MovieCard({
   to,
   playTo,
 }: MovieCardProps) {
-  const [added, setAdded] = useState(false);
+  const added = useIsInList(item.id);
   const navigate = useNavigate();
 
   const openDetail = () => navigate(to ?? `/title/${item.id}`);
@@ -34,7 +36,19 @@ export default memo(function MovieCard({
 
   const toggleAdd = (e: MouseEvent) => {
     e.stopPropagation();
-    setAdded((v) => !v);
+    const wasAdded = toggleMyList(item);
+    showToast(
+      wasAdded ? "Added to My List" : "Removed from My List",
+      wasAdded
+        ? {
+            message: item.title,
+            action: {
+              label: "View My List",
+              onClick: () => navigate("/my-list"),
+            },
+          }
+        : { message: item.title },
+    );
   };
 
   const meta = [item.year, item.duration, item.rating && `★ ${item.rating}`]

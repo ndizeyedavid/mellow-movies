@@ -4,6 +4,8 @@ import { FaPlus, FaCheck, FaStar, FaDownload } from "react-icons/fa6";
 import { fetchCatalog, fetchDetail } from "../api/client";
 import { mapApiItems, mapDetail } from "../api/media";
 import type { MediaItem } from "../data/mockData";
+import { toggleMyList, useIsInList } from "../store/myList";
+import { showToast } from "../utils/toast";
 import Container from "../components/ui/Container";
 import Button from "../components/ui/Button";
 import MovieCard from "../components/ui/MovieCard";
@@ -18,7 +20,7 @@ import backIcon from "../assets/icon-arrow-left.svg";
 export default function TitleDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [added, setAdded] = useState(false);
+  const added = useIsInList(id ?? "");
   const [snap, setSnap] = useState<{
     id: string;
     item: MediaItem | null;
@@ -214,7 +216,21 @@ export default function TitleDetailPage() {
                   <FaPlus className="h-5 w-5" />
                 )
               }
-              onClick={() => setAdded((v) => !v)}
+              onClick={() => {
+                const wasAdded = toggleMyList(item);
+                showToast(
+                  wasAdded ? "Added to My List" : "Removed from My List",
+                  wasAdded
+                    ? {
+                        message: item.title,
+                        action: {
+                          label: "View My List",
+                          onClick: () => navigate("/my-list"),
+                        },
+                      }
+                    : { message: item.title },
+                );
+              }}
             >
               {added ? "In Your List" : "Add to List"}
             </Button>

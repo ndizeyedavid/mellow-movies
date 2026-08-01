@@ -48,6 +48,7 @@ export const NAV_LINKS: NavLink[] = [
 
 export const MORE_LINKS: NavLink[] = [
   { label: "Browse All", to: "/browse" },
+  { label: "My List", to: "/my-list" },
   { label: "Support", to: "/support" },
   { label: "Subscriptions", to: "/pricing" },
 ];

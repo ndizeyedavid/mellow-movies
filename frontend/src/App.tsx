@@ -18,6 +18,7 @@ const SubscriptionPage = lazy(() => import("./pages/SubscriptionPage"));
 const TitleDetailPage = lazy(() => import("./pages/TitleDetailPage"));
 const WatchPage = lazy(() => import("./pages/WatchPage"));
 const SearchPage = lazy(() => import("./pages/SearchPage"));
+const MyListPage = lazy(() => import("./pages/MyListPage"));
 
 /** Scrolls to the top on every route change so detail pages open fresh. */
 function ScrollToTop() {
@@ -89,6 +90,14 @@ const router = createBrowserRouter([
         element: (
           <Suspense fallback={<PageFallback />}>
             <SearchPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: "my-list",
+        element: (
+          <Suspense fallback={<PageFallback />}>
+            <MyListPage />
           </Suspense>
         ),
       },
