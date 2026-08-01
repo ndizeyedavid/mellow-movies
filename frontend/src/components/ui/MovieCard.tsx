@@ -7,6 +7,10 @@ import playIcon from "../../assets/icon-play.svg";
 interface MovieCardProps {
   item: MediaItem;
   rank?: number;
+  /** Override the destination of a card click (defaults to the detail page). */
+  to?: string;
+  /** Override the destination of the play overlay (defaults to the watch page). */
+  playTo?: string;
 }
 
 /**
@@ -14,13 +18,14 @@ interface MovieCardProps {
  * card 296px, padding 30px, poster 252px with rank badge + gradient,
  * title + genre row with a 30px add-to-list icon button.
  * Hover: poster zooms, play button fades in, border brightens.
- * Clicking the card or the play overlay opens the title detail page.
+ * Card click opens the detail page; the play overlay opens the watch page.
  */
-export default function MovieCard({ item, rank }: MovieCardProps) {
+export default function MovieCard({ item, rank, to, playTo }: MovieCardProps) {
   const [added, setAdded] = useState(false);
   const navigate = useNavigate();
 
-  const openDetail = () => navigate(`/title/${item.id}`);
+  const openDetail = () => navigate(to ?? `/title/${item.id}`);
+  const openPlay = () => navigate(playTo ?? `/watch/${item.id}`);
 
   const toggleAdd = (e: MouseEvent) => {
     e.stopPropagation();
@@ -53,7 +58,7 @@ export default function MovieCard({ item, rank }: MovieCardProps) {
           aria-label={`Play ${item.title}`}
           onClick={(e) => {
             e.stopPropagation();
-            openDetail();
+            openPlay();
           }}
           className="absolute inset-0 m-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary/90 opacity-0 backdrop-blur-sm transition-all duration-300 group-hover:opacity-100 hover:bg-primary"
         >

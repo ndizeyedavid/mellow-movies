@@ -1,11 +1,7 @@
 import { useMemo, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { FaPlus, FaCheck, FaStar, FaDownload } from "react-icons/fa6";
-import {
-  movies,
-  shows,
-  type MediaItem,
-} from "../data/mockData";
+import { movies, shows, type MediaItem } from "../data/mockData";
 import Container from "../components/ui/Container";
 import Button from "../components/ui/Button";
 import MovieCard from "../components/ui/MovieCard";
@@ -24,10 +20,7 @@ export default function TitleDetailPage() {
   const navigate = useNavigate();
   const [added, setAdded] = useState(false);
 
-  const item = useMemo(
-    () => ALL_ITEMS.find((m) => m.id === id) ?? null,
-    [id],
-  );
+  const item = useMemo(() => ALL_ITEMS.find((m) => m.id === id) ?? null, [id]);
 
   const recommendations = useMemo(() => {
     if (!item) return [];
@@ -37,10 +30,7 @@ export default function TitleDetailPage() {
     const shared = sameType.filter((m) =>
       m.genres.some((g) => item.genres.includes(g)),
     );
-    const pool = [
-      ...shared,
-      ...sameType.filter((m) => !shared.includes(m)),
-    ];
+    const pool = [...shared, ...sameType.filter((m) => !shared.includes(m))];
     return pool.slice(0, 10);
   }, [item]);
 
@@ -79,10 +69,7 @@ export default function TitleDetailPage() {
           className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-background to-transparent"
           aria-hidden="true"
         />
-        <div
-          className="absolute inset-0 bg-background/20"
-          aria-hidden="true"
-        />
+        <div className="absolute inset-0 bg-background/20" aria-hidden="true" />
 
         <Container className="relative flex h-full flex-col justify-end pb-10 sm:pb-14">
           {/* Back button */}
@@ -117,9 +104,15 @@ export default function TitleDetailPage() {
               <FaStar className="h-4 w-4 text-primary" aria-hidden="true" />
               {item.rating}
             </span>
-            <span className="h-1 w-1 rounded-full bg-muted" aria-hidden="true" />
+            <span
+              className="h-1 w-1 rounded-full bg-muted"
+              aria-hidden="true"
+            />
             <span>{item.year}</span>
-            <span className="h-1 w-1 rounded-full bg-muted" aria-hidden="true" />
+            <span
+              className="h-1 w-1 rounded-full bg-muted"
+              aria-hidden="true"
+            />
             <span>{item.duration}</span>
             {item.quality && (
               <>
@@ -142,7 +135,7 @@ export default function TitleDetailPage() {
             <Button
               size="lg"
               icon={<img src={playIcon} alt="" className="h-6 w-6" />}
-              onClick={() => setAdded(true)}
+              onClick={() => navigate(`/watch/${item.id}`)}
             >
               Play Now
             </Button>

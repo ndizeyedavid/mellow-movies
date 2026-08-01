@@ -120,7 +120,7 @@ export default function HeroCarousel({
         {/* Action bar */}
         <div className="mt-5 flex items-center gap-3">
           <button
-            onClick={() => navigate(`/title/${current.id}`)}
+            onClick={() => navigate(`/watch/${current.id}`)}
             className="flex items-center gap-2 rounded-lg bg-primary px-6 py-3 text-base font-semibold text-white transition-colors duration-200 hover:bg-primary-dark active:scale-[0.98] sm:px-7"
           >
             <img src={playIcon} alt="" className="h-5 w-5" />

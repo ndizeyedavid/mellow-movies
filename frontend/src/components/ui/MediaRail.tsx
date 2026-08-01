@@ -7,13 +7,20 @@ interface MediaRailProps {
   title: string;
   subtitle?: string;
   items: MediaItem[];
+  /** Override where cards navigate (defaults to the title detail page). */
+  cardTo?: (item: MediaItem) => string;
 }
 
 /**
  * MovieBox-style category row: heading with arrow controls on the right
  * and a horizontally scrollable, snap-aligned strip of movie cards.
  */
-export default function MediaRail({ title, subtitle, items }: MediaRailProps) {
+export default function MediaRail({
+  title,
+  subtitle,
+  items,
+  cardTo,
+}: MediaRailProps) {
   const scrollerRef = useRef<HTMLDivElement>(null);
 
   if (items.length === 0) return null;
@@ -33,7 +40,9 @@ export default function MediaRail({ title, subtitle, items }: MediaRailProps) {
           <h2 className="text-2xl font-bold text-white md:text-3xl xl:text-[32px]">
             {title}
           </h2>
-          {subtitle && <p className="text-base text-muted lg:text-lg">{subtitle}</p>}
+          {subtitle && (
+            <p className="text-base text-muted lg:text-lg">{subtitle}</p>
+          )}
         </div>
 
         <div className="flex shrink-0 items-center gap-3">
@@ -64,7 +73,7 @@ export default function MediaRail({ title, subtitle, items }: MediaRailProps) {
             data-card
             className="w-[240px] shrink-0 snap-start sm:w-[260px] lg:w-[237px] xl:w-[296px]"
           >
-            <MovieCard item={item} />
+            <MovieCard item={item} to={cardTo?.(item)} />
           </div>
         ))}
       </div>

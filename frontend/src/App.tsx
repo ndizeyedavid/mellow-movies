@@ -13,6 +13,7 @@ import ShowsPage from "./pages/ShowsPage";
 import SupportPage from "./pages/SupportPage";
 import SubscriptionPage from "./pages/SubscriptionPage";
 import TitleDetailPage from "./pages/TitleDetailPage";
+import WatchPage from "./pages/WatchPage";
 
 /** Scrolls to the top on every route change so detail pages open fresh. */
 function ScrollToTop() {
@@ -40,6 +41,7 @@ const router = createBrowserRouter([
       { path: "support", element: <SupportPage /> },
       { path: "pricing", element: <SubscriptionPage /> },
       { path: "title/:id", element: <TitleDetailPage /> },
+      { path: "watch/:id", element: <WatchPage /> },
       { path: "*", element: <Navigate to="/" replace /> },
     ],
   },
