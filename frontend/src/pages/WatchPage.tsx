@@ -9,6 +9,7 @@ import {
   type ApiCaption,
 } from "../api/client";
 import { mapApiItems, mapDetail } from "../api/media";
+import { srtUrlToVttBlob } from "../utils/captions";
 import type { MediaItem } from "../data/mockData";
 import StreamPlayer from "../components/player/StreamPlayer";
 import EpisodePanel from "../components/player/EpisodePanel";
@@ -27,8 +28,9 @@ const RES_PRIORITY: Record<string, number> = {
 function mapCaptions(list: ApiCaption[]) {
   return list
     .map((c) => ({
-      lang: c.lang ?? c.language ?? "und",
-      label: c.name ?? c.label ?? c.lang ?? c.language ?? "Subtitles",
+      lang: c.lan ?? c.lang ?? c.language ?? "und",
+      label:
+        c.lanName ?? c.name ?? c.label ?? c.lang ?? c.language ?? "Subtitles",
       src: c.url ?? c.src ?? "",
     }))
     .filter((t) => t.src);
@@ -102,6 +104,7 @@ function WatchContent({ item }: { item: MediaItem }) {
   const [streamSnap, setStreamSnap] = useState<{
     key: string;
     srcs: string[];
+    labels: string[];
     captions: Array<{ lang: string; label: string; src: string }>;
   } | null>(null);
   const [recommendations, setRecommendations] = useState<MediaItem[]>([]);
@@ -117,16 +120,17 @@ function WatchContent({ item }: { item: MediaItem }) {
   useEffect(() => {
     if (!item.subjectId) return;
     let alive = true;
+    const blobUrls: string[] = [];
     Promise.all([
       fetchStream(item.subjectId, item.id, se, ep),
       fetchCaptions(item.subjectId, item.id, se, ep),
     ])
-      .then(([stream, caps]) => {
+      .then(async ([stream, caps]) => {
         if (!alive) return;
         // Candidate order: DASH (moviebox's native path, proxied) → HLS →
         // direct MP4 (highest resolution first). The player auto-falls back
         // down the list if one candidate fails to start.
-        const dashUrl = stream.dash.find((d) => d.url)?.url;
+        const dashEntry = stream.dash.find((d) => d.url);
         const hlsUrl = stream.hls[0]?.url;
         const mp4s = [...stream.sources]
           .filter((s) => s.url)
@@ -134,20 +138,43 @@ function WatchContent({ item }: { item: MediaItem }) {
             (a, b) =>
               (RES_PRIORITY[b.resolution.toUpperCase()] ?? 0) -
               (RES_PRIORITY[a.resolution.toUpperCase()] ?? 0),
-          )
-          .map((s) => s.url);
-        const srcs = [dashUrl, hlsUrl, ...mp4s].filter((u): u is string =>
-          Boolean(u),
-        );
-        setStreamSnap({
-          key: playerKey,
-          srcs,
-          captions: mapCaptions(caps.captions),
+          );
+        const srcs: string[] = [];
+        const labels: string[] = [];
+        if (dashEntry) {
+          srcs.push(dashEntry.url);
+          labels.push(
+            `DASH${dashEntry.resolutions ? ` · ${dashEntry.resolutions}` : ""}`,
+          );
+        }
+        if (hlsUrl) {
+          srcs.push(hlsUrl);
+          labels.push("HLS");
+        }
+        mp4s.forEach((s) => {
+          srcs.push(s.url);
+          labels.push(s.resolution);
         });
+
+        // The moviebox API serves SRT subtitles; convert each to a WebVTT
+        // blob URL so the browser's native <track> can actually play it.
+        const tracks: Array<{ lang: string; label: string; src: string }> = [];
+        for (const t of mapCaptions(caps.captions)) {
+          try {
+            const vtt = await srtUrlToVttBlob(t.src);
+            blobUrls.push(vtt);
+            tracks.push({ lang: t.lang, label: t.label, src: vtt });
+          } catch {
+            /* skip caption that failed to load */
+          }
+        }
+        if (!alive) return;
+        setStreamSnap({ key: playerKey, srcs, labels, captions: tracks });
       })
       .catch(() => {});
     return () => {
       alive = false;
+      blobUrls.forEach((u) => URL.revokeObjectURL(u));
     };
   }, [item.subjectId, item.id, se, ep, playerKey]);
 
@@ -157,6 +184,7 @@ function WatchContent({ item }: { item: MediaItem }) {
     !item.subjectId ||
     (streamSnap?.key === playerKey && streamSnap.srcs.length === 0);
   const streamSrcs = streamSnap?.key === playerKey ? streamSnap.srcs : [];
+  const streamLabels = streamSnap?.key === playerKey ? streamSnap.labels : [];
   const captions = streamSnap?.key === playerKey ? streamSnap.captions : [];
 
   // Same-type catalog for "More Like This".
@@ -242,6 +270,7 @@ function WatchContent({ item }: { item: MediaItem }) {
               <StreamPlayer
                 key={playerKey}
                 srcs={streamSrcs}
+                srcLabels={streamLabels}
                 poster={item.poster}
                 title={item.title}
                 subtitleTracks={captions}

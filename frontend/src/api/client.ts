@@ -78,8 +78,11 @@ export interface ApiStream {
 }
 
 export interface ApiCaption {
+  id?: string;
   url?: string;
   src?: string;
+  lan?: string;
+  lanName?: string;
   lang?: string;
   language?: string;
   name?: string;

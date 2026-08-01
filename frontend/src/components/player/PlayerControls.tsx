@@ -19,6 +19,7 @@ export type PlayerMenu = "quality" | "speed" | "audio" | "subs" | null;
 export interface QualityLevel {
   height: number;
   bitrate: number;
+  label?: string;
 }
 
 export interface PlayerAudioTrack {
@@ -44,6 +45,9 @@ interface PlayerControlsProps {
   playbackRate: number;
   levels: QualityLevel[];
   currentLevel: number; // -1 = Auto
+  /** Whether the stream supports adaptive rendition switching (DASH/HLS).
+   *  False for direct files, where the quality menu lists plain files. */
+  adaptive?: boolean;
   audioTracks: PlayerAudioTrack[];
   currentAudioTrack: number;
   subtitleTracks: PlayerSubtitle[];
@@ -105,6 +109,7 @@ export default function PlayerControls(props: PlayerControlsProps) {
     playbackRate,
     levels,
     currentLevel,
+    adaptive = true,
     audioTracks,
     currentAudioTrack,
     subtitleTracks,
@@ -119,7 +124,7 @@ export default function PlayerControls(props: PlayerControlsProps) {
 
   const activeLevel =
     currentLevel >= 0 && levels[currentLevel]
-      ? levels[currentLevel].height
+      ? (levels[currentLevel].label ?? `${levels[currentLevel].height}p`)
       : null;
 
   const iconBtn =
@@ -217,7 +222,7 @@ export default function PlayerControls(props: PlayerControlsProps) {
             className={menuBtn(menu === "quality")}
             title="Quality"
           >
-            {activeLevel ? `${activeLevel}p` : "Auto"}
+            {activeLevel ?? "Auto"}
           </button>
 
           <button
@@ -262,18 +267,20 @@ export default function PlayerControls(props: PlayerControlsProps) {
           <ul className="max-h-[calc(55vh-44px)] overflow-y-auto pb-4 sm:max-h-72 sm:pb-2">
             {menu === "quality" && (
               <>
-                <MenuOption
-                  label="Auto (adaptive)"
-                  active={currentLevel === -1}
-                  onClick={() => props.onLevelChange(-1)}
-                />
+                {adaptive && (
+                  <MenuOption
+                    label="Auto (adaptive)"
+                    active={currentLevel === -1}
+                    onClick={() => props.onLevelChange(-1)}
+                  />
+                )}
                 {[...levels]
                   .map((l, i) => ({ ...l, i }))
                   .sort((a, b) => b.height - a.height)
                   .map((l) => (
                     <MenuOption
                       key={l.i}
-                      label={`${l.height}p`}
+                      label={l.label ?? `${l.height}p`}
                       active={currentLevel === l.i}
                       onClick={() => props.onLevelChange(l.i)}
                     />

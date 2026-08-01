@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -30,6 +31,9 @@ interface StreamPlayerProps {
   /** Playable candidates in priority order (DASH → HLS → MP4). The player
    *  tries each in turn until one starts, then keeps it. */
   srcs: string[];
+  /** Parallel to `srcs` — human labels ("1080p", "DASH · 1080,720,480"...).
+   *  Used to build the quality menu for direct-file playback. */
+  srcLabels?: string[];
   poster?: string;
   title?: string;
   subtitleTracks: SubtitleTrack[];
@@ -46,6 +50,7 @@ const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2];
  */
 export default function StreamPlayer({
   srcs,
+  srcLabels,
   poster,
   title = "Video",
   subtitleTracks,
@@ -85,6 +90,37 @@ export default function StreamPlayer({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPip, setIsPip] = useState(false);
 
+  /* ---------- Direct-file quality ---------- */
+  // MP4 playback is a single file per resolution; build the quality menu
+  // from the candidate list (adaptive DASH/HLS entries are excluded — those
+  // expose their own renditions through the player engine).
+  const isFileSrc = !isDashSrc && !isHlsSrc;
+  const fileEntries = useMemo(
+    () =>
+      srcs
+        .map((u, i) => ({
+          url: u,
+          label: srcLabels?.[i] ?? `Source ${i + 1}`,
+          adaptive: /\.(mpd|m3u8)(?:\?|$)/i.test(u),
+        }))
+        .filter((e) => !e.adaptive),
+    [srcs, srcLabels],
+  );
+  const fileLevels: QualityLevel[] = useMemo(
+    () =>
+      fileEntries.map((e) => ({
+        height: Number.parseInt(e.label, 10) || 0,
+        bitrate: 0,
+        label: e.label,
+      })),
+    [fileEntries],
+  );
+  const effectiveLevels = isFileSrc ? fileLevels : levels;
+  const fileIndex = fileEntries.findIndex((e) => e.url === src);
+  const effectiveCurrentLevel = isFileSrc
+    ? Math.max(fileIndex, 0)
+    : currentLevel;
+
   /* ---------- Playback bootstrap (DASH, HLS or direct file) ---------- */
   useEffect(() => {
     const video = videoRef.current;
@@ -115,6 +151,18 @@ export default function StreamPlayer({
 
       dash.on(dashjs.MediaPlayer.events.PLAYBACK_METADATA_LOADED, () => {
         onMetadata();
+        const info = dash.getTracksFor("video")[0]?.bitrateList ?? [];
+        if (info.length) {
+          setLevels(
+            info.map((l) => ({
+              height: l.height || 0,
+              bitrate: l.bandwidth || 0,
+            })),
+          );
+        }
+      });
+      dash.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, () => {
+        // Re-read renditions — fires slightly earlier than metadata loaded.
         const info = dash.getTracksFor("video")[0]?.bitrateList ?? [];
         if (info.length) {
           setLevels(
@@ -320,7 +368,13 @@ export default function StreamPlayer({
       }
       return;
     }
-    if (hlsRef.current) hlsRef.current.currentLevel = level;
+    if (hlsRef.current) {
+      hlsRef.current.currentLevel = level;
+      return;
+    }
+    // Direct file: switch to the picked quality in the candidate list.
+    const entry = fileEntries[level];
+    if (entry) setSrcIndex(srcs.indexOf(entry.url));
   };
 
   const onAudioTrackChange = (id: number) => {
@@ -506,8 +560,9 @@ export default function StreamPlayer({
         volume={volume}
         muted={muted}
         playbackRate={rate}
-        levels={levels}
-        currentLevel={currentLevel}
+        levels={effectiveLevels}
+        currentLevel={effectiveCurrentLevel}
+        adaptive={!isFileSrc}
         audioTracks={audioTracks}
         currentAudioTrack={currentAudioTrack}
         subtitleTracks={subtitleTracksState}
