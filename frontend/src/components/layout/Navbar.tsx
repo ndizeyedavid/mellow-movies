@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { FaBars, FaXmark, FaAngleDown } from "react-icons/fa6";
 import { NAV_LINKS, MORE_LINKS } from "../../data/mockData";
+import { useMyList } from "../../store/myList";
 import SearchBar from "./SearchBar";
 import logoMark from "../../assets/logo-mark.svg";
 
@@ -17,6 +18,7 @@ export default function Navbar() {
   const [hidden, setHidden] = useState(false);
   const lastY = useRef(0);
   const moreRef = useRef<HTMLDivElement>(null);
+  const savedCount = useMyList().length;
 
   // Hide on scroll down, reveal on scroll up (keeps the bar out of the way
   // while browsing; never hides at the top of the page or with the menu open).
@@ -67,10 +69,10 @@ export default function Navbar() {
           className="flex shrink-0 items-center gap-3"
           aria-label="Mellow Movies home"
         >
-          <img src={logoMark} alt="" className="h-10 w-10 lg:h-11 lg:w-11" />
-          <span className="whitespace-nowrap text-lg font-bold tracking-tight text-white lg:text-xl">
+          <img src={"/logo.png"} alt="" className="w-[130px]" />
+          {/* <span className="whitespace-nowrap text-lg font-bold tracking-tight text-white lg:text-xl">
             Mellow Movies
-          </span>
+          </span> */}
         </Link>
 
         {/* Centered pill nav — desktop only */}
@@ -129,6 +131,11 @@ export default function Navbar() {
                   }
                 >
                   {link.label}
+                  {link.to === "/my-list" && savedCount > 0 && (
+                    <span className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-bold text-white">
+                      {savedCount}
+                    </span>
+                  )}
                 </NavLink>
               ))}
             </div>
@@ -198,6 +205,11 @@ export default function Navbar() {
                   }
                 >
                   {link.label}
+                  {link.to === "/my-list" && savedCount > 0 && (
+                    <span className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-bold text-white">
+                      {savedCount}
+                    </span>
+                  )}
                 </NavLink>
               ))}
             </div>

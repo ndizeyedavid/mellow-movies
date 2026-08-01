@@ -11,6 +11,7 @@ import {
 import PageHero from "../components/ui/PageHero";
 import FaqSection from "../components/sections/FaqSection";
 import Button from "../components/ui/Button";
+import { usePageTitle } from "../hooks/usePageTitle";
 
 const contactCards = [
   {
@@ -45,6 +46,7 @@ const socials = [
  * contact info cards, FAQ section, and a contact form with socials.
  */
 export default function SupportPage() {
+  usePageTitle("Support");
   const [sent, setSent] = useState(false);
 
   const onSubmit = (e: FormEvent<HTMLFormElement>) => {

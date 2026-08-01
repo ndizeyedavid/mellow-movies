@@ -1,0 +1,19 @@
+{
+  "name": "Mellow Movies — Stream Movies & Shows",
+  "short_name": "Mellow",
+  "description": "Stream blockbuster movies and hit TV shows on demand. Free to watch.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#141414",
+  "theme_color": "#141414",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

@@ -402,9 +402,9 @@ async def get_home():
             sections.append({"section": title, "count": len(items), "items": items})
     return {"status": "success", "sections": sections}
 
-async def _get_category_data(tab_id: int, page: int = 1, per_page: int = 24, sort: str = "RECOMMEND") -> dict:
+async def _get_category_data(tab_id: int, page: int = 1, per_page: int = 24, sort: str = "RECOMMEND", genre: str = "ALL") -> dict:
     url = f"{API_BASE}/subject/filter"
-    payload = {"tabId": tab_id, "filter": {"sort": sort, "genre": "ALL", "country": "ALL", "year": "ALL", "language": "ALL"}, "page": page, "perPage": per_page}
+    payload = {"tabId": tab_id, "filter": {"sort": sort, "genre": genre, "country": "ALL", "year": "ALL", "language": "ALL"}, "page": page, "perPage": per_page}
     data = await _make_request(url, method="POST", payload=payload)
     inner = data.get("data", {})
     raw_items = inner.get("items", inner.get("subjects", []))
@@ -422,16 +422,16 @@ async def _get_category_data(tab_id: int, page: int = 1, per_page: int = 24, sor
     return {"page": page, "per_page": per_page, "total": total, "items": items}
 
 @app.get("/movies")
-async def get_movies(page: int = 1, sort: str = "RECOMMEND"):
-    return await _get_category_data(tab_id=2, page=page, sort=sort)
+async def get_movies(page: int = 1, sort: str = "RECOMMEND", genre: str = "ALL"):
+    return await _get_category_data(tab_id=2, page=page, sort=sort, genre=genre)
 
 @app.get("/tv-series")
-async def get_tv_series(page: int = 1, sort: str = "RECOMMEND"):
-    return await _get_category_data(tab_id=5, page=page, sort=sort)
+async def get_tv_series(page: int = 1, sort: str = "RECOMMEND", genre: str = "ALL"):
+    return await _get_category_data(tab_id=5, page=page, sort=sort, genre=genre)
 
 @app.get("/animation")
-async def get_animation(page: int = 1, sort: str = "RECOMMEND"):
-    return await _get_category_data(tab_id=8, page=page, sort=sort)
+async def get_animation(page: int = 1, sort: str = "RECOMMEND", genre: str = "ALL"):
+    return await _get_category_data(tab_id=8, page=page, sort=sort, genre=genre)
 
 @app.get("/search/suggest")
 async def get_search_suggestions(q: str = Query(..., min_length=1)):
@@ -459,7 +459,8 @@ async def search(q: str = Query(..., min_length=1), page: int = 1):
         "name": sub.get("title"),
         "poster_url": sub.get("cover", {}).get("url"),
         "slug": sub.get("detailPath"),
-        "subject_id": sub.get("subjectId")
+        "subject_id": sub.get("subjectId"),
+        "subjectType": sub.get("subjectType")
     } for sub in raw]
     pager = inner.get("pager", {})
     total = pager.get("totalCount") or inner.get("total") or len(items)
@@ -484,7 +485,18 @@ async def get_stream_sources(subject_id: str, detail_path: str, se: int = 1, ep:
     play_url = f"{domain}/wefeed-h5api-bff/subject/play?subjectId={subject_id}&se={se}&ep={ep}&detailPath={detail_path}"
 
     async with httpx.AsyncClient(follow_redirects=True, timeout=25) as client:
-        resp = await client.get(play_url, headers={**PLAYER_HEADERS, "Referer": player_referer})
+        # Retry once — the upstream can transiently 5xx under load, and the
+        # browser never sees the flaky call if the first attempt recovers.
+        resp = None
+        for attempt in range(2):
+            try:
+                resp = await client.get(play_url, headers={**PLAYER_HEADERS, "Referer": player_referer})
+                if resp.status_code < 500:
+                    break
+            except httpx.HTTPError:
+                pass
+            if attempt == 0:
+                await asyncio.sleep(0.8)
         data = resp.json().get("data", {})
 
     has_resource = data.get("hasResource", False)

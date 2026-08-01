@@ -1,8 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import PageHero from "./PageHero";
 import MediaGrid from "./MediaGrid";
 import { FaAngleDown } from "react-icons/fa6";
+import { fetchCatalog } from "../../api/client";
+import { mapApiItems } from "../../api/media";
 import type { MediaItem } from "../../data/mockData";
+import { categories } from "../../data/mockData";
 
 export type SortKey = "popular" | "rating" | "year" | "az";
 
@@ -10,7 +13,8 @@ interface MediaCatalogProps {
   title: string;
   kicker: string;
   description: string;
-  items: MediaItem[];
+  /** Which API catalog to load. */
+  kind: "movies" | "tv-series";
 }
 
 const SORTS: Array<{ key: SortKey; label: string }> = [
@@ -20,37 +24,70 @@ const SORTS: Array<{ key: SortKey; label: string }> = [
   { key: "az", label: "A – Z" },
 ];
 
-const PAGE_SIZE = 10;
-
 /**
  * Reusable catalog layout for the "Movies" and "TV Shows" open pages:
  * hero banner, sort dropdown, responsive grid and pagination controls.
+ * Fetches each page from the API as you navigate.
  */
 export default function MediaCatalog({
   title,
   kicker,
   description,
-  items,
+  kind,
 }: MediaCatalogProps) {
   const [sort, setSort] = useState<SortKey>("popular");
   const [page, setPage] = useState(1);
+  const [genre, setGenre] = useState("ALL");
+  const [snap, setSnap] = useState<{
+    page: number;
+    genre: string;
+    items: MediaItem[];
+    total: number;
+    perPage: number;
+  }>({ page: 0, genre: "ALL", items: [], total: 0, perPage: 24 });
+
+  useEffect(() => {
+    let alive = true;
+    fetchCatalog(kind, page, genre)
+      .then((res) => {
+        if (!alive) return;
+        setSnap({
+          page,
+          genre,
+          items: mapApiItems(res.items, kind === "movies" ? "movie" : "show"),
+          total: res.total,
+          perPage: res.per_page,
+        });
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [kind, page, genre]);
+
+  // Derived: still loading until the snapshot matches the requested filter.
+  const loading = snap.page !== page || snap.genre !== genre;
+  const total = snap.total;
+  const perPage = snap.perPage;
 
   const sorted = useMemo(() => {
-    const list = [...items];
+    const list =
+      snap.page === page && snap.genre === genre ? [...snap.items] : [];
     switch (sort) {
       case "rating":
-        return list.sort((a, b) => Number(b.rating) - Number(a.rating));
+        return list.sort(
+          (a, b) => Number(b.rating ?? 0) - Number(a.rating ?? 0),
+        );
       case "year":
-        return list.sort((a, b) => b.year - a.year);
+        return list.sort((a, b) => (b.year ?? 0) - (a.year ?? 0));
       case "az":
         return list.sort((a, b) => a.title.localeCompare(b.title));
       default:
         return list;
     }
-  }, [items, sort]);
+  }, [snap, page, sort, genre]);
 
-  const pages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-  const pageItems = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
 
   return (
     <>
@@ -62,7 +99,9 @@ export default function MediaCatalog({
           <div className="flex flex-wrap items-center justify-between gap-6">
             <p className="text-lg text-muted">
               Showing{" "}
-              <span className="font-semibold text-white">{sorted.length}</span>{" "}
+              <span className="font-semibold text-white">
+                {total.toLocaleString()}
+              </span>{" "}
               titles
             </p>
             <div className="relative">
@@ -91,13 +130,63 @@ export default function MediaCatalog({
             </div>
           </div>
 
-          <MediaGrid items={pageItems} />
+          {/* Genre filter chips */}
+          <div
+            className="flex flex-wrap gap-2.5"
+            role="group"
+            aria-label="Filter by genre"
+          >
+            <button
+              onClick={() => {
+                setGenre("ALL");
+                setPage(1);
+              }}
+              aria-pressed={genre === "ALL"}
+              className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors duration-200 ${
+                genre === "ALL"
+                  ? "border-primary bg-primary text-white"
+                  : "border-line bg-card text-soft hover:border-line2 hover:text-white"
+              }`}
+            >
+              All
+            </button>
+            {categories.map((g) => (
+              <button
+                key={g}
+                onClick={() => {
+                  setGenre(g);
+                  setPage(1);
+                }}
+                aria-pressed={genre === g}
+                className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors duration-200 ${
+                  genre === g
+                    ? "border-primary bg-primary text-white"
+                    : "border-line bg-card text-soft hover:border-line2 hover:text-white"
+                }`}
+              >
+                {g}
+              </button>
+            ))}
+          </div>
+
+          {loading ? (
+            <div className="grid grid-cols-1 gap-[30px] sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+              {Array.from({ length: 10 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="h-[300px] animate-pulse rounded-xl bg-card2 sm:h-[330px]"
+                />
+              ))}
+            </div>
+          ) : (
+            <MediaGrid items={sorted} />
+          )}
 
           {/* Pagination */}
-          {pages > 1 && (
+          {totalPages > 1 && (
             <nav
               aria-label="Pagination"
-              className="flex items-center justify-center gap-2"
+              className="flex items-center justify-center gap-4"
             >
               <button
                 disabled={page === 1}
@@ -106,22 +195,12 @@ export default function MediaCatalog({
               >
                 Prev
               </button>
-              {Array.from({ length: pages }).map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setPage(i + 1)}
-                  aria-current={page === i + 1 ? "page" : undefined}
-                  className={`h-12 w-12 rounded-lg border text-lg transition-colors duration-200 ${
-                    page === i + 1
-                      ? "border-primary bg-primary font-medium text-white"
-                      : "border-line bg-card text-soft hover:border-line2 hover:text-white"
-                  }`}
-                >
-                  {i + 1}
-                </button>
-              ))}
+              <span className="text-lg text-muted">
+                Page <span className="font-semibold text-white">{page}</span> of{" "}
+                {totalPages.toLocaleString()}
+              </span>
               <button
-                disabled={page === pages}
+                disabled={page >= totalPages}
                 onClick={() => setPage((p) => p + 1)}
                 className="rounded-lg border border-line bg-card px-5 py-3 text-lg text-soft transition-colors duration-200 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
               >

@@ -1,16 +1,17 @@
-import MediaCatalog from '../components/ui/MediaCatalog'
-import { shows } from '../data/mockData'
+import MediaCatalog from "../components/ui/MediaCatalog";
+import { usePageTitle } from "../hooks/usePageTitle";
 
 /**
- * TV Shows page (Figma "Shows Page Open - Desktop" #226:2795).
+ * TV Shows page (Figma "TV Show Page Open - Desktop" #106:1302).
  */
 export default function ShowsPage() {
+  usePageTitle("TV Shows");
   return (
     <MediaCatalog
       kicker="TV Shows"
       title="All Shows"
       description="Binge-worthy series, originals and fan favorites. Full seasons available in HD and 4K."
-      items={shows}
+      kind="tv-series"
     />
-  )
+  );
 }

@@ -1,49 +1,82 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import Hls from "hls.js";
-import {
-  FaPlay,
-  FaCircleNotch,
-  FaRotateRight,
-  FaTriangleExclamation,
-} from "react-icons/fa6";
+import * as dashjs from "dashjs";
+import { FaPlay, FaRotateRight, FaTriangleExclamation } from "react-icons/fa6";
+import BufferingIndicator from "./BufferingIndicator";
 import PlayerControls, {
   type PlayerAudioTrack,
   type PlayerMenu,
   type PlayerSubtitle,
   type QualityLevel,
 } from "./PlayerControls";
-import type { SubtitleTrack } from "../../data/streams";
+
+interface SubtitleTrack {
+  lang: string;
+  label: string;
+  src: string;
+}
 
 interface StreamPlayerProps {
-  src: string;
+  /** Playable candidates in priority order (DASH → HLS → MP4). The player
+   *  tries each in turn until one starts, then keeps it. */
+  srcs: string[];
+  /** Parallel to `srcs` — human labels ("1080p", "DASH · 1080,720,480"...).
+   *  Used to build the quality menu for direct-file playback. */
+  srcLabels?: string[];
   poster?: string;
   title?: string;
   subtitleTracks: SubtitleTrack[];
+  /** Resume playback from this position (seconds) once metadata loads. */
+  startAt?: number;
+  /** Reported on every timeupdate — the page uses it to save progress. */
+  onProgress?: (position: number, duration: number) => void;
+  /** Fired when the media finishes playing (drives "up next"). */
+  onEnded?: () => void;
 }
 
 const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
 /**
- * MovieBox-style streaming player built on hls.js:
+ * MovieBox-style streaming player built on dash.js + hls.js:
  * adaptive quality (Auto + all renditions), audio tracks, subtitles,
  * playback speed, seek/volume, fullscreen and picture-in-picture.
+ * DASH is preferred (moviebox's native path), falling back to HLS or
+ * a direct MP4 file when a candidate fails to start.
  */
 export default function StreamPlayer({
-  src,
+  srcs,
+  srcLabels,
   poster,
   title = "Video",
   subtitleTracks,
+  startAt,
+  onProgress,
+  onEnded,
 }: StreamPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const dashRef = useRef<dashjs.MediaPlayerClass | null>(null);
+  const startedRef = useRef(false);
   const hideTimerRef = useRef<number | undefined>(undefined);
+  // Remembers which source already got its one free retry (429s are often
+  // transient — one retry beats jumping straight to the next source).
+  const retriedSrcRef = useRef<string | null>(null);
+  // Resume target captured once per mount — the bootstrap effect re-runs on
+  // source switches but must not seek again after the first metadata.
+  const startAtRef = useRef(startAt);
+
+  const [srcIndex, setSrcIndex] = useState(0);
+  const src = srcs[srcIndex] ?? "";
+  const isDashSrc = /\.mpd(?:\?|$)/i.test(src);
+  const isHlsSrc = /\.m3u8(?:\?|$)/i.test(src);
 
   const [reloadKey, setReloadKey] = useState(0);
   const [paused, setPaused] = useState(true);
@@ -68,27 +101,136 @@ export default function StreamPlayer({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPip, setIsPip] = useState(false);
 
-  /* ---------- HLS bootstrap ---------- */
+  /* ---------- Direct-file quality ---------- */
+  // MP4 playback is a single file per resolution; build the quality menu
+  // from the candidate list (adaptive DASH/HLS entries are excluded — those
+  // expose their own renditions through the player engine).
+  const isFileSrc = !isDashSrc && !isHlsSrc;
+  const fileEntries = useMemo(
+    () =>
+      srcs
+        .map((u, i) => ({
+          url: u,
+          label: srcLabels?.[i] ?? `Source ${i + 1}`,
+          adaptive: /\.(mpd|m3u8)(?:\?|$)/i.test(u),
+        }))
+        .filter((e) => !e.adaptive),
+    [srcs, srcLabels],
+  );
+  const fileLevels: QualityLevel[] = useMemo(
+    () =>
+      fileEntries.map((e) => ({
+        height: Number.parseInt(e.label, 10) || 0,
+        bitrate: 0,
+        label: e.label,
+      })),
+    [fileEntries],
+  );
+  const effectiveLevels = isFileSrc ? fileLevels : levels;
+  const fileIndex = fileEntries.findIndex((e) => e.url === src);
+  const effectiveCurrentLevel = isFileSrc
+    ? Math.max(fileIndex, 0)
+    : currentLevel;
+
+  /* ---------- Playback bootstrap (DASH, HLS or direct file) ---------- */
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || !src) return;
 
     setWaiting(true);
     setError(false);
+    startedRef.current = false;
 
-    if (Hls.isSupported()) {
+    const onMetadata = () => {
+      setDuration(video.duration || 0);
+      setWaiting(false);
+      // Resume: seek once, on the first metadata event of this mount.
+      const resume = startAtRef.current;
+      if (resume && resume > 5 && video.duration > 0) {
+        video.currentTime = Math.min(resume, video.duration - 1);
+      }
+      startAtRef.current = undefined;
+    };
+    // Fatal failure on the current candidate. Transient CDN errors (429/5xx)
+    // are common — retry the same source once with a short delay, then move
+    // down the list. Once playback has actually started, stop and show error.
+    const fail = () => {
+      if (startedRef.current) {
+        setError(true);
+        setWaiting(false);
+        return;
+      }
+      if (retriedSrcRef.current !== src) {
+        retriedSrcRef.current = src;
+        setWaiting(true);
+        window.setTimeout(() => setReloadKey((k) => k + 1), 1200);
+        return;
+      }
+      if (srcIndex + 1 >= srcs.length) {
+        setError(true);
+        setWaiting(false);
+      } else {
+        setSrcIndex((i) => i + 1);
+      }
+    };
+
+    if (isDashSrc && dashjs.supportsMediaSource()) {
+      const dash = dashjs.MediaPlayer().create();
+      dashRef.current = dash;
+
+      dash.on(dashjs.MediaPlayer.events.PLAYBACK_METADATA_LOADED, () => {
+        onMetadata();
+        const info = dash.getTracksFor("video")[0]?.bitrateList ?? [];
+        if (info.length) {
+          setLevels(
+            info.map((l) => ({
+              height: l.height || 0,
+              bitrate: l.bandwidth || 0,
+            })),
+          );
+        }
+      });
+      dash.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, () => {
+        // Re-read renditions — fires slightly earlier than metadata loaded.
+        const info = dash.getTracksFor("video")[0]?.bitrateList ?? [];
+        if (info.length) {
+          setLevels(
+            info.map((l) => ({
+              height: l.height || 0,
+              bitrate: l.bandwidth || 0,
+            })),
+          );
+        }
+      });
+      dash.on(dashjs.MediaPlayer.events.ERROR, () => fail());
+      dash.on(dashjs.MediaPlayer.events.QUALITY_CHANGE_RENDERED, (e) => {
+        const ev = e as unknown as { newRepresentation?: { index?: number } };
+        setCurrentLevel(ev.newRepresentation?.index ?? -1);
+      });
+
+      dash.initialize(video, src, false);
+      dash.updateSettings({
+        streaming: { buffer: { fastSwitchEnabled: true } },
+      });
+
+      return () => {
+        dash.reset();
+        dashRef.current = null;
+      };
+    }
+
+    if (isHlsSrc && Hls.isSupported()) {
       const hls = new Hls({ enableWorker: true });
       hlsRef.current = hls;
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        setDuration(video.duration || 0);
+        onMetadata();
         setLevels(
           hls.levels.map((l) => ({
             height: l.height || 0,
             bitrate: l.bitrate,
           })),
         );
-        setWaiting(false);
       });
 
       hls.on(Hls.Events.LEVEL_SWITCHED, (_e, data) => {
@@ -116,8 +258,7 @@ export default function StreamPlayer({
         } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
           hls.recoverMediaError();
         } else {
-          setError(true);
-          setWaiting(false);
+          fail();
         }
       });
 
@@ -130,22 +271,32 @@ export default function StreamPlayer({
       };
     }
 
-    if (video.canPlayType("application/vnd.apple.mpegurl")) {
+    if (isHlsSrc && video.canPlayType("application/vnd.apple.mpegurl")) {
       // Native HLS (Safari)
       video.src = src;
-      video.addEventListener("loadedmetadata", () => {
-        setDuration(video.duration || 0);
-        setWaiting(false);
-      });
+      video.addEventListener("loadedmetadata", onMetadata);
+      video.addEventListener("error", fail);
       return () => {
+        video.removeEventListener("loadedmetadata", onMetadata);
+        video.removeEventListener("error", fail);
         video.removeAttribute("src");
         video.load();
       };
     }
 
-    setError(true);
-    setWaiting(false);
-  }, [src, reloadKey]);
+    // Direct MP4 (or any other file) — play natively. Also the graceful
+    // fallback for HLS when hls.js is unavailable; errors surface through
+    // the video "error" event below.
+    video.src = src;
+    video.addEventListener("loadedmetadata", onMetadata);
+    video.addEventListener("error", fail);
+    return () => {
+      video.removeEventListener("loadedmetadata", onMetadata);
+      video.removeEventListener("error", fail);
+      video.removeAttribute("src");
+      video.load();
+    };
+  }, [src, srcs.length, srcIndex, reloadKey, isDashSrc, isHlsSrc]);
 
   /* ---------- Fullscreen / PiP state ---------- */
   useEffect(() => {
@@ -235,7 +386,23 @@ export default function StreamPlayer({
   };
 
   const onLevelChange = (level: number) => {
-    if (hlsRef.current) hlsRef.current.currentLevel = level;
+    if (dashRef.current) {
+      if (level >= 0) {
+        dashRef.current.setRepresentationForTypeByIndex("video", level, false);
+      } else {
+        dashRef.current.updateSettings({
+          streaming: { abr: { autoSwitchBitrate: { video: true } } },
+        });
+      }
+      return;
+    }
+    if (hlsRef.current) {
+      hlsRef.current.currentLevel = level;
+      return;
+    }
+    // Direct file: switch to the picked quality in the candidate list.
+    const entry = fileEntries[level];
+    if (entry) setSrcIndex(srcs.indexOf(entry.url));
   };
 
   const onAudioTrackChange = (id: number) => {
@@ -333,6 +500,7 @@ export default function StreamPlayer({
         onDoubleClick={onToggleFullscreen}
         onPlay={() => {
           setPaused(false);
+          startedRef.current = true;
           showControls();
         }}
         onPause={() => {
@@ -342,8 +510,10 @@ export default function StreamPlayer({
         onWaiting={() => setWaiting(true)}
         onPlaying={() => setWaiting(false)}
         onTimeUpdate={(e) => {
-          setCurrentTime(e.currentTarget.currentTime);
+          const t = e.currentTarget.currentTime;
+          setCurrentTime(t);
           updateBuffered();
+          onProgress?.(t, e.currentTarget.duration || 0);
         }}
         onProgress={updateBuffered}
         onDurationChange={(e) => setDuration(e.currentTarget.duration || 0)}
@@ -351,14 +521,17 @@ export default function StreamPlayer({
           setVolume(e.currentTarget.volume);
           setMuted(e.currentTarget.muted);
         }}
-        onEnded={() => setPaused(true)}
+        onEnded={() => {
+          setPaused(true);
+          onEnded?.();
+        }}
         className="h-full w-full object-contain"
         playsInline
-        crossOrigin="anonymous"
+        crossOrigin={isHlsSrc ? "anonymous" : undefined}
       >
-        {subtitleTracks.map((t) => (
+        {subtitleTracks.map((t, i) => (
           <track
-            key={t.lang}
+            key={`${t.lang}-${i}`}
             kind="subtitles"
             srcLang={t.lang}
             label={t.label}
@@ -382,15 +555,9 @@ export default function StreamPlayer({
         </button>
       )}
 
-      {/* Loading spinner */}
-      {waiting && !paused && !error && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
-          <FaCircleNotch
-            aria-label="Buffering"
-            className="h-12 w-12 animate-spin text-primary"
-          />
-        </div>
-      )}
+      {/* Buffering indicator — circular progress with a fake percentage so
+          the user always sees something happening while the stream loads. */}
+      {waiting && !paused && !error && <BufferingIndicator />}
 
       {/* Error state */}
       {error && (
@@ -420,8 +587,9 @@ export default function StreamPlayer({
         volume={volume}
         muted={muted}
         playbackRate={rate}
-        levels={levels}
-        currentLevel={currentLevel}
+        levels={effectiveLevels}
+        currentLevel={effectiveCurrentLevel}
+        adaptive={!isFileSrc}
         audioTracks={audioTracks}
         currentAudioTrack={currentAudioTrack}
         subtitleTracks={subtitleTracksState}
