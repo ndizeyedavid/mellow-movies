@@ -5,6 +5,7 @@ import { FaAngleDown } from "react-icons/fa6";
 import { fetchCatalog } from "../../api/client";
 import { mapApiItems } from "../../api/media";
 import type { MediaItem } from "../../data/mockData";
+import { categories } from "../../data/mockData";
 
 export type SortKey = "popular" | "rating" | "year" | "az";
 
@@ -36,20 +37,23 @@ export default function MediaCatalog({
 }: MediaCatalogProps) {
   const [sort, setSort] = useState<SortKey>("popular");
   const [page, setPage] = useState(1);
+  const [genre, setGenre] = useState("ALL");
   const [snap, setSnap] = useState<{
     page: number;
+    genre: string;
     items: MediaItem[];
     total: number;
     perPage: number;
-  }>({ page: 0, items: [], total: 0, perPage: 24 });
+  }>({ page: 0, genre: "ALL", items: [], total: 0, perPage: 24 });
 
   useEffect(() => {
     let alive = true;
-    fetchCatalog(kind, page)
+    fetchCatalog(kind, page, genre)
       .then((res) => {
         if (!alive) return;
         setSnap({
           page,
+          genre,
           items: mapApiItems(res.items, kind === "movies" ? "movie" : "show"),
           total: res.total,
           perPage: res.per_page,
@@ -59,15 +63,16 @@ export default function MediaCatalog({
     return () => {
       alive = false;
     };
-  }, [kind, page]);
+  }, [kind, page, genre]);
 
-  // Derived: still loading until the snapshot matches the requested page.
-  const loading = snap.page !== page;
+  // Derived: still loading until the snapshot matches the requested filter.
+  const loading = snap.page !== page || snap.genre !== genre;
   const total = snap.total;
   const perPage = snap.perPage;
 
   const sorted = useMemo(() => {
-    const list = snap.page === page ? [...snap.items] : [];
+    const list =
+      snap.page === page && snap.genre === genre ? [...snap.items] : [];
     switch (sort) {
       case "rating":
         return list.sort(
@@ -80,7 +85,7 @@ export default function MediaCatalog({
       default:
         return list;
     }
-  }, [snap, page, sort]);
+  }, [snap, page, sort, genre]);
 
   const totalPages = Math.max(1, Math.ceil(total / perPage));
 
@@ -123,6 +128,45 @@ export default function MediaCatalog({
                 className="pointer-events-none absolute right-5 top-1/2 h-5 w-5 -translate-y-1/2 text-muted"
               />
             </div>
+          </div>
+
+          {/* Genre filter chips */}
+          <div
+            className="flex flex-wrap gap-2.5"
+            role="group"
+            aria-label="Filter by genre"
+          >
+            <button
+              onClick={() => {
+                setGenre("ALL");
+                setPage(1);
+              }}
+              aria-pressed={genre === "ALL"}
+              className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors duration-200 ${
+                genre === "ALL"
+                  ? "border-primary bg-primary text-white"
+                  : "border-line bg-card text-soft hover:border-line2 hover:text-white"
+              }`}
+            >
+              All
+            </button>
+            {categories.map((g) => (
+              <button
+                key={g}
+                onClick={() => {
+                  setGenre(g);
+                  setPage(1);
+                }}
+                aria-pressed={genre === g}
+                className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors duration-200 ${
+                  genre === g
+                    ? "border-primary bg-primary text-white"
+                    : "border-line bg-card text-soft hover:border-line2 hover:text-white"
+                }`}
+              >
+                {g}
+              </button>
+            ))}
           </div>
 
           {loading ? (

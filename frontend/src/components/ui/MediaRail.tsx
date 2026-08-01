@@ -9,6 +9,8 @@ interface MediaRailProps {
   items: MediaItem[];
   /** Override where cards navigate (defaults to the title detail page). */
   cardTo?: (item: MediaItem) => string;
+  /** 0..1 progress per item — drives the thin progress bar on each card. */
+  progressFor?: (item: MediaItem) => number | undefined;
 }
 
 /**
@@ -20,6 +22,7 @@ export default memo(function MediaRail({
   subtitle,
   items,
   cardTo,
+  progressFor,
 }: MediaRailProps) {
   const scrollerRef = useRef<HTMLDivElement>(null);
 
@@ -73,7 +76,11 @@ export default memo(function MediaRail({
             data-card
             className="w-[240px] shrink-0 snap-start sm:w-[260px] lg:w-[237px] xl:w-[296px]"
           >
-            <MovieCard item={item} to={cardTo?.(item)} />
+            <MovieCard
+              item={item}
+              to={cardTo?.(item)}
+              progress={progressFor?.(item)}
+            />
           </div>
         ))}
       </div>

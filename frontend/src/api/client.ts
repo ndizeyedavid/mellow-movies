@@ -264,10 +264,13 @@ export const fetchHome = () =>
 export const fetchCatalog = (
   kind: "movies" | "tv-series" | "animation",
   page = 1,
+  genre = "ALL",
 ) =>
-  getJson<ApiCatalogPage>(`/${kind}?page=${page}`, "catalog", {
-    persist: page <= 3,
-  });
+  getJson<ApiCatalogPage>(
+    `/${kind}?page=${page}&genre=${encodeURIComponent(genre)}`,
+    "catalog",
+    { persist: page <= 3 },
+  );
 
 export const searchTitles = (q: string, page = 1) =>
   getJson<ApiCatalogPage>(

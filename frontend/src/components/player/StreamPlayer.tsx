@@ -33,6 +33,12 @@ interface StreamPlayerProps {
   poster?: string;
   title?: string;
   subtitleTracks: SubtitleTrack[];
+  /** Resume playback from this position (seconds) once metadata loads. */
+  startAt?: number;
+  /** Reported on every timeupdate — the page uses it to save progress. */
+  onProgress?: (position: number, duration: number) => void;
+  /** Fired when the media finishes playing (drives "up next"). */
+  onEnded?: () => void;
 }
 
 const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2];
@@ -50,6 +56,9 @@ export default function StreamPlayer({
   poster,
   title = "Video",
   subtitleTracks,
+  startAt,
+  onProgress,
+  onEnded,
 }: StreamPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -57,6 +66,9 @@ export default function StreamPlayer({
   const dashRef = useRef<dashjs.MediaPlayerClass | null>(null);
   const startedRef = useRef(false);
   const hideTimerRef = useRef<number | undefined>(undefined);
+  // Resume target captured once per mount — the bootstrap effect re-runs on
+  // source switches but must not seek again after the first metadata.
+  const startAtRef = useRef(startAt);
 
   const [srcIndex, setSrcIndex] = useState(0);
   const src = srcs[srcIndex] ?? "";
@@ -129,6 +141,12 @@ export default function StreamPlayer({
     const onMetadata = () => {
       setDuration(video.duration || 0);
       setWaiting(false);
+      // Resume: seek once, on the first metadata event of this mount.
+      const resume = startAtRef.current;
+      if (resume && resume > 5 && video.duration > 0) {
+        video.currentTime = Math.min(resume, video.duration - 1);
+      }
+      startAtRef.current = undefined;
     };
     // Fatal failure on the current candidate: move down the list. Once
     // playback has actually started, stop falling back and show the error.
@@ -191,14 +209,13 @@ export default function StreamPlayer({
       hlsRef.current = hls;
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        setDuration(video.duration || 0);
+        onMetadata();
         setLevels(
           hls.levels.map((l) => ({
             height: l.height || 0,
             bitrate: l.bitrate,
           })),
         );
-        setWaiting(false);
       });
 
       hls.on(Hls.Events.LEVEL_SWITCHED, (_e, data) => {
@@ -478,8 +495,10 @@ export default function StreamPlayer({
         onWaiting={() => setWaiting(true)}
         onPlaying={() => setWaiting(false)}
         onTimeUpdate={(e) => {
-          setCurrentTime(e.currentTarget.currentTime);
+          const t = e.currentTarget.currentTime;
+          setCurrentTime(t);
           updateBuffered();
+          onProgress?.(t, e.currentTarget.duration || 0);
         }}
         onProgress={updateBuffered}
         onDurationChange={(e) => setDuration(e.currentTarget.duration || 0)}
@@ -487,7 +506,10 @@ export default function StreamPlayer({
           setVolume(e.currentTarget.volume);
           setMuted(e.currentTarget.muted);
         }}
-        onEnded={() => setPaused(true)}
+        onEnded={() => {
+          setPaused(true);
+          onEnded?.();
+        }}
         className="h-full w-full object-contain"
         playsInline
         crossOrigin={isHlsSrc ? "anonymous" : undefined}

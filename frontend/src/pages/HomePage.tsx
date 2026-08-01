@@ -1,4 +1,5 @@
 import Hero from "../components/home/Hero";
+import ContinueWatchingRail from "../components/home/ContinueWatchingRail";
 import TrendingSection from "../components/home/TrendingSection";
 import DevicesSection from "../components/sections/DevicesSection";
 import FaqSection from "../components/sections/FaqSection";
@@ -7,13 +8,15 @@ import CtaSection from "../components/sections/CtaSection";
 
 /**
  * Home page (Figma "Home Page - Desktop" #34:919, height 5518px).
- * Sections in order: Hero → Trending Now → Devices → FAQ → Pricing → CTA.
+ * Sections in order: Hero → Continue Watching → Trending Now →
+ * Devices → FAQ → Pricing → CTA.
  */
 export default function HomePage() {
   return (
     <>
       <Hero />
       <div className="section-stack pt-10 md:pt-14 2xl:pt-16">
+        <ContinueWatchingRail />
         <TrendingSection />
         <DevicesSection />
         <FaqSection />

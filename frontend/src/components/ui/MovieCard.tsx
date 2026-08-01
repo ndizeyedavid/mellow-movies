@@ -13,6 +13,8 @@ interface MovieCardProps {
   to?: string;
   /** Override the destination of the play overlay (defaults to the watch page). */
   playTo?: string;
+  /** 0..1 playback progress — renders a thin bar under the poster. */
+  progress?: number;
 }
 
 /**
@@ -27,6 +29,7 @@ export default memo(function MovieCard({
   rank,
   to,
   playTo,
+  progress,
 }: MovieCardProps) {
   const added = useIsInList(item.id);
   const navigate = useNavigate();
@@ -78,6 +81,18 @@ export default memo(function MovieCard({
         )}
         {/* bottom fade matching Figma gradient overlay */}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-[#1a1a1a] to-transparent" />
+
+        {/* playback progress bar (Continue Watching) */}
+        {progress !== undefined && progress > 0 && (
+          <div className="absolute inset-x-0 bottom-0 h-1 bg-white/15">
+            <div
+              className="h-full bg-primary"
+              style={{
+                width: `${Math.min(progress * 100, 100).toFixed(1)}%`,
+              }}
+            />
+          </div>
+        )}
 
         {rank !== undefined && (
           <span className="absolute left-2 top-0 text-[64px] font-semibold leading-none text-white/25">

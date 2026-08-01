@@ -402,9 +402,9 @@ async def get_home():
             sections.append({"section": title, "count": len(items), "items": items})
     return {"status": "success", "sections": sections}
 
-async def _get_category_data(tab_id: int, page: int = 1, per_page: int = 24, sort: str = "RECOMMEND") -> dict:
+async def _get_category_data(tab_id: int, page: int = 1, per_page: int = 24, sort: str = "RECOMMEND", genre: str = "ALL") -> dict:
     url = f"{API_BASE}/subject/filter"
-    payload = {"tabId": tab_id, "filter": {"sort": sort, "genre": "ALL", "country": "ALL", "year": "ALL", "language": "ALL"}, "page": page, "perPage": per_page}
+    payload = {"tabId": tab_id, "filter": {"sort": sort, "genre": genre, "country": "ALL", "year": "ALL", "language": "ALL"}, "page": page, "perPage": per_page}
     data = await _make_request(url, method="POST", payload=payload)
     inner = data.get("data", {})
     raw_items = inner.get("items", inner.get("subjects", []))
@@ -422,16 +422,16 @@ async def _get_category_data(tab_id: int, page: int = 1, per_page: int = 24, sor
     return {"page": page, "per_page": per_page, "total": total, "items": items}
 
 @app.get("/movies")
-async def get_movies(page: int = 1, sort: str = "RECOMMEND"):
-    return await _get_category_data(tab_id=2, page=page, sort=sort)
+async def get_movies(page: int = 1, sort: str = "RECOMMEND", genre: str = "ALL"):
+    return await _get_category_data(tab_id=2, page=page, sort=sort, genre=genre)
 
 @app.get("/tv-series")
-async def get_tv_series(page: int = 1, sort: str = "RECOMMEND"):
-    return await _get_category_data(tab_id=5, page=page, sort=sort)
+async def get_tv_series(page: int = 1, sort: str = "RECOMMEND", genre: str = "ALL"):
+    return await _get_category_data(tab_id=5, page=page, sort=sort, genre=genre)
 
 @app.get("/animation")
-async def get_animation(page: int = 1, sort: str = "RECOMMEND"):
-    return await _get_category_data(tab_id=8, page=page, sort=sort)
+async def get_animation(page: int = 1, sort: str = "RECOMMEND", genre: str = "ALL"):
+    return await _get_category_data(tab_id=8, page=page, sort=sort, genre=genre)
 
 @app.get("/search/suggest")
 async def get_search_suggestions(q: str = Query(..., min_length=1)):

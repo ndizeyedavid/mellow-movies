@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { FaStar } from "react-icons/fa6";
 import {
@@ -10,6 +10,13 @@ import {
 } from "../api/client";
 import { mapApiItems, mapDetail } from "../api/media";
 import { srtUrlToVttBlob } from "../utils/captions";
+import { showToast } from "../utils/toast";
+import {
+  clearProgress,
+  getAllProgress,
+  getProgress,
+  saveProgress,
+} from "../store/progress";
 import type { MediaItem } from "../data/mockData";
 import StreamPlayer from "../components/player/StreamPlayer";
 import BufferingIndicator from "../components/player/BufferingIndicator";
@@ -35,6 +42,35 @@ function mapCaptions(list: ApiCaption[]) {
       src: c.url ?? c.src ?? "",
     }))
     .filter((t) => t.src);
+}
+
+/** Next episode in the season map, or null at the end of a series. */
+function nextEpisode(
+  seasonMap: Array<{ se: number; maxEp: number }>,
+  pick: { season: number; episode: number },
+): { season: number; episode: number } | null {
+  const cur = seasonMap.find((s) => s.se === pick.season);
+  if (!cur) return null;
+  if (pick.episode < cur.maxEp) {
+    return { season: pick.season, episode: pick.episode + 1 };
+  }
+  const nextSeason = seasonMap.find((s) => s.se === pick.season + 1);
+  if (nextSeason && nextSeason.maxEp > 0) {
+    return { season: nextSeason.se, episode: 1 };
+  }
+  return null;
+}
+
+/** Start where the user last left off for this title. */
+function initialPick(item: MediaItem): { season: number; episode: number } {
+  const saved = Object.values(getAllProgress())
+    .filter((e) => e.item.id === item.id)
+    .sort((a, b) => b.updatedAt - a.updatedAt)[0];
+  if (saved) {
+    const m = saved.key.match(/-s(\d+)e(\d+)$/);
+    if (m) return { season: Number(m[1]), episode: Number(m[2]) };
+  }
+  return { season: 1, episode: 1 };
 }
 
 /**
@@ -101,7 +137,7 @@ export default function WatchPage() {
 
 function WatchContent({ item }: { item: MediaItem }) {
   const navigate = useNavigate();
-  const [pick, setPick] = useState({ season: 1, episode: 1 });
+  const [pick, setPick] = useState(() => initialPick(item));
   const [streamSnap, setStreamSnap] = useState<{
     key: string;
     srcs: string[];
@@ -116,6 +152,8 @@ function WatchContent({ item }: { item: MediaItem }) {
   const se = isShow ? pick.season : (item.seasonMap?.[0]?.se ?? 0);
   const ep = isShow ? pick.episode : 0;
   const playerKey = `${item.id}-s${pick.season}e${pick.episode}`;
+  // Resume position for the current episode (read once per episode mount).
+  const resumeAt = getProgress(playerKey)?.position;
 
   // Resolve the playable source for the selected episode.
   useEffect(() => {
@@ -210,6 +248,57 @@ function WatchContent({ item }: { item: MediaItem }) {
     };
   }, [item.type, item.id]);
 
+  // ---------- Playback progress (Continue Watching + resume) ----------
+  const lastProgressRef = useRef<{ position: number; duration: number } | null>(
+    null,
+  );
+  const lastSaveAtRef = useRef(0);
+
+  const handleProgress = (position: number, duration: number) => {
+    lastProgressRef.current = { position, duration };
+    const now = Date.now();
+    // Throttle localStorage writes to ~every 5s of playback.
+    if (now - lastSaveAtRef.current >= 5000) {
+      lastSaveAtRef.current = now;
+      saveProgress({ key: playerKey, item, position, duration });
+    }
+  };
+
+  // Flush the latest position when switching episodes / leaving the page —
+  // the throttled save may not have fired for the tail end of playback.
+  useEffect(() => {
+    return () => {
+      const lp = lastProgressRef.current;
+      if (lp && lp.position > 5) {
+        saveProgress({
+          key: playerKey,
+          item,
+          position: lp.position,
+          duration: lp.duration,
+        });
+      }
+    };
+  }, [playerKey, item]);
+
+  // Auto-play the next episode when a series entry finishes; movies (and
+  // final episodes) just clear their progress.
+  const handleEnded = () => {
+    if (!isShow) {
+      clearProgress(playerKey);
+      return;
+    }
+    const next = nextEpisode(item.seasonMap ?? [], pick);
+    if (next) {
+      setPick(next);
+      showToast("Up Next", {
+        message: `${item.title} — Season ${next.season}, Episode ${next.episode}`,
+        duration: 5000,
+      });
+    } else {
+      clearProgress(playerKey);
+    }
+  };
+
   const meta = [
     item.rating && (
       <span
@@ -272,6 +361,9 @@ function WatchContent({ item }: { item: MediaItem }) {
                 poster={item.poster}
                 title={item.title}
                 subtitleTracks={captions}
+                startAt={resumeAt}
+                onProgress={handleProgress}
+                onEnded={handleEnded}
               />
             )}
           </div>

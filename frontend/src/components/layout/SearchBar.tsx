@@ -99,10 +99,33 @@ export default function SearchBar({
     suggestions: string[];
   }>({ key: "", results: [], suggestions: [] });
   const rootRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
   const trimmed = query.trim();
   const apiPending = trimmed !== "" && apiSnap.key !== trimmed;
+
+  // "/" anywhere on the page focuses the search box (unless already typing).
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (
+        t &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.tagName === "SELECT" ||
+          t.isContentEditable)
+      ) {
+        return;
+      }
+      e.preventDefault();
+      inputRef.current?.focus();
+      setOpen(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // Close when clicking outside.
   useEffect(() => {
@@ -288,6 +311,7 @@ export default function SearchBar({
           aria-hidden="true"
         />
         <input
+          ref={inputRef}
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
