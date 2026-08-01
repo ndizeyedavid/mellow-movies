@@ -1,0 +1,51 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+
+  /* Figma design tokens — Mellow Movies */
+  --color-background: #141414; /* Black/08 */
+  --color-surface: #0f0f0f; /* Black/06 */
+  --color-card: #1a1a1a; /* Black/10 */
+  --color-card2: #1f1f1f; /* Black/12 */
+  --color-line: #262626; /* Black/15 */
+  --color-line2: #333333; /* Black/20 */
+  --color-primary: #e50000; /* Red/45 */
+  --color-primary-dark: #b30000;
+  --color-muted: #999999; /* Grey/60 */
+  --color-soft: #bfbfbf; /* Grey/75 */
+
+  /* Responsive breakpoints: mobile 320+, tablet 768+, desktop 1200+ */
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1200px;
+  --breakpoint-xl: 1440px;
+  --breakpoint-2xl: 1920px;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--color-background);
+  color: #ffffff;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Subtle custom scrollbar to match the dark theme */
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-background);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-line);
+  border-radius: 100px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-line2);
+}
