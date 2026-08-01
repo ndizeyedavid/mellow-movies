@@ -5,12 +5,15 @@ import { fetchCatalog, fetchDetail } from "../api/client";
 import { mapApiItems, mapDetail } from "../api/media";
 import type { MediaItem } from "../data/mockData";
 import { toggleMyList, useIsInList } from "../store/myList";
+import { getLastWatchedEpisode } from "../store/progress";
 import { showToast } from "../utils/toast";
 import { usePageTitle } from "../hooks/usePageTitle";
+import { useOgMeta } from "../hooks/useOgMeta";
 import Container from "../components/ui/Container";
 import Button from "../components/ui/Button";
 import MovieCard from "../components/ui/MovieCard";
 import ShareButton from "../components/ui/ShareButton";
+import EpisodePanel from "../components/player/EpisodePanel";
 import playIcon from "../assets/icon-play.svg";
 import backIcon from "../assets/icon-arrow-left.svg";
 
@@ -66,6 +69,16 @@ export default function TitleDetailPage() {
   const item = snap && snap.id === id ? snap.item : null;
 
   usePageTitle(item?.title);
+  useOgMeta(
+    item
+      ? {
+          title: item.title,
+          description: item.description ?? item.plot,
+          image: item.poster,
+          kind: item.type,
+        }
+      : undefined,
+  );
 
   if (loading) {
     return (
@@ -131,6 +144,13 @@ export default function TitleDetailPage() {
     ["Genres", (item.genres ?? []).join(", ")],
   ];
   const details = rawDetails.filter(([, v]) => v.length > 0);
+
+  // Episode picker: shows with a real season map get a picker here, and it
+  // opens on the last episode the user watched.
+  const isShow = item.type === "show" && (item.seasonMap?.length ?? 0) > 0;
+  const lastWatched = getLastWatchedEpisode(item);
+  const activeSeason = lastWatched?.season ?? 1;
+  const activeEpisode = lastWatched?.episode ?? 1;
 
   return (
     <div className="bg-background">
@@ -257,7 +277,44 @@ export default function TitleDetailPage() {
               </p>
             </div>
 
-            {(item.cast ?? []).length > 0 && (
+            {(item.castDetailed ?? []).length > 0 ? (
+              <div>
+                <h2 className="text-2xl font-bold text-white md:text-3xl">
+                  Cast
+                </h2>
+                <ul className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+                  {item.castDetailed!.slice(0, 12).map((member) => (
+                    <li
+                      key={member.name}
+                      className="flex min-w-0 items-center gap-3 rounded-xl border border-line bg-card p-3"
+                    >
+                      {member.avatar ? (
+                        <img
+                          src={member.avatar}
+                          alt={member.name}
+                          loading="lazy"
+                          className="h-12 w-12 shrink-0 rounded-full object-cover"
+                        />
+                      ) : (
+                        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-card2 text-lg font-bold text-muted">
+                          {member.name.charAt(0)}
+                        </span>
+                      )}
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold text-white">
+                          {member.name}
+                        </span>
+                        {member.role && (
+                          <span className="block truncate text-xs text-muted">
+                            {member.role}
+                          </span>
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (item.cast ?? []).length > 0 ? (
               <div>
                 <h2 className="text-2xl font-bold text-white md:text-3xl">
                   Cast
@@ -272,6 +329,20 @@ export default function TitleDetailPage() {
                     </li>
                   ))}
                 </ul>
+              </div>
+            ) : null}
+
+            {/* Episode picker for series — pick before entering the player */}
+            {isShow && (
+              <div className="lg:pr-6 2xl:pr-8">
+                <EpisodePanel
+                  item={item}
+                  activeSeason={activeSeason}
+                  activeEpisode={activeEpisode}
+                  onSelect={(season, episode) =>
+                    navigate(`/watch/${item.id}?se=${season}&ep=${episode}`)
+                  }
+                />
               </div>
             )}
           </div>

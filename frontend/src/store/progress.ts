@@ -72,6 +72,19 @@ export function getProgress(key: string): ProgressEntry | null {
   return load()[key] ?? null;
 }
 
+/** Last episode the user watched for a title, or null if never started. */
+export function getLastWatchedEpisode(
+  item: MediaItem,
+): { season: number; episode: number } | null {
+  const saved = Object.values(getAllProgress())
+    .filter((e) => e.item.id === item.id)
+    .sort((a, b) => b.updatedAt - a.updatedAt)[0];
+  if (!saved) return null;
+  const m = saved.key.match(/-s(\d+)e(\d+)$/);
+  if (!m) return null;
+  return { season: Number(m[1]), episode: Number(m[2]) };
+}
+
 /**
  * Record playback position. Positions under 5s are ignored (too early to
  * matter); watching ≥95% marks the title finished and removes it.

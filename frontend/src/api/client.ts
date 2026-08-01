@@ -157,6 +157,8 @@ export interface ApiItem {
   badge?: string | null;
   rating?: string | null;
   year?: string | null;
+  /** 2 = TV series (moviebox convention); absent on catalog items. */
+  subjectType?: number;
 }
 
 export interface ApiSection {
@@ -244,7 +246,13 @@ export interface ApiDetailData {
     dubs?: Array<{ lanName?: string; type?: number }>;
     corner?: string;
   };
-  stars?: Array<{ name?: string }>;
+  stars?: Array<{
+    name?: string;
+    character?: string;
+    avatarUrl?: string;
+    staffType?: number;
+    detailPath?: string;
+  }>;
   resource?: {
     seasons?: Array<{ se: number; maxEp: number; allEp?: string }>;
     source?: string;

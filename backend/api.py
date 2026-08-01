@@ -459,7 +459,8 @@ async def search(q: str = Query(..., min_length=1), page: int = 1):
         "name": sub.get("title"),
         "poster_url": sub.get("cover", {}).get("url"),
         "slug": sub.get("detailPath"),
-        "subject_id": sub.get("subjectId")
+        "subject_id": sub.get("subjectId"),
+        "subjectType": sub.get("subjectType")
     } for sub in raw]
     pager = inner.get("pager", {})
     total = pager.get("totalCount") or inner.get("total") or len(items)
@@ -484,7 +485,18 @@ async def get_stream_sources(subject_id: str, detail_path: str, se: int = 1, ep:
     play_url = f"{domain}/wefeed-h5api-bff/subject/play?subjectId={subject_id}&se={se}&ep={ep}&detailPath={detail_path}"
 
     async with httpx.AsyncClient(follow_redirects=True, timeout=25) as client:
-        resp = await client.get(play_url, headers={**PLAYER_HEADERS, "Referer": player_referer})
+        # Retry once — the upstream can transiently 5xx under load, and the
+        # browser never sees the flaky call if the first attempt recovers.
+        resp = None
+        for attempt in range(2):
+            try:
+                resp = await client.get(play_url, headers={**PLAYER_HEADERS, "Referer": player_referer})
+                if resp.status_code < 500:
+                    break
+            except httpx.HTTPError:
+                pass
+            if attempt == 0:
+                await asyncio.sleep(0.8)
         data = resp.json().get("data", {})
 
     has_resource = data.get("hasResource", False)

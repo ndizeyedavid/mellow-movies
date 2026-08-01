@@ -4,7 +4,7 @@ import Container from "../components/ui/Container";
 import MediaGrid from "../components/ui/MediaGrid";
 import { categories } from "../data/mockData";
 import { fetchHome, searchTitles } from "../api/client";
-import { mapApiItems } from "../api/media";
+import { mapSearchItems } from "../api/media";
 import type { MediaItem } from "../data/mockData";
 import { usePageTitle } from "../hooks/usePageTitle";
 
@@ -18,6 +18,7 @@ export default function SearchPage() {
   const query = searchParams.get("q") ?? "";
   usePageTitle(query ? `Results for “${query}”` : "Search");
   const [page, setPage] = useState(1);
+  const [filter, setFilter] = useState<"all" | "movie" | "show">("all");
   const [snap, setSnap] = useState<{
     q: string;
     page: number;
@@ -43,7 +44,7 @@ export default function SearchPage() {
         setSnap({
           q: query,
           page,
-          items: mapApiItems(res.items, "movie"),
+          items: mapSearchItems(res.items),
           total: res.total,
           perPage: res.per_page,
         });
@@ -57,6 +58,8 @@ export default function SearchPage() {
   // Derived results: ignore stale snapshots while a new query is in flight.
   const loading = query !== "" && (snap.q !== query || snap.page !== page);
   const items = snap.q === query ? snap.items : [];
+  const filtered =
+    filter === "all" ? items : items.filter((i) => i.type === filter);
   const total = snap.total;
   const perPage = snap.perPage;
 
@@ -68,9 +71,7 @@ export default function SearchPage() {
       .then((res) => {
         if (!alive) return;
         const banner = res.sections.find((s) => s.section === "Banner");
-        setPopular(
-          banner ? mapApiItems(banner.items.slice(0, 8), "movie") : [],
-        );
+        setPopular(banner ? mapSearchItems(banner.items.slice(0, 8)) : []);
       })
       .catch(() => {});
     return () => {
@@ -94,9 +95,40 @@ export default function SearchPage() {
                 Search results
               </h1>
               <p className="text-lg text-muted">
-                {total.toLocaleString()} {total === 1 ? "result" : "results"}{" "}
+                {filter === "all" ? total : filtered.length}{" "}
+                {(filter === "all" ? total : filtered.length) === 1
+                  ? "result"
+                  : "results"}{" "}
                 for <span className="font-semibold text-white">“{query}”</span>
               </p>
+            </div>
+
+            {/* Type filter chips */}
+            <div
+              className="flex flex-wrap gap-2.5"
+              role="group"
+              aria-label="Filter results by type"
+            >
+              {(
+                [
+                  { key: "all", label: "All" },
+                  { key: "movie", label: "Movies" },
+                  { key: "show", label: "TV Shows" },
+                ] as const
+              ).map((f) => (
+                <button
+                  key={f.key}
+                  onClick={() => setFilter(f.key)}
+                  aria-pressed={filter === f.key}
+                  className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors duration-200 ${
+                    filter === f.key
+                      ? "border-primary bg-primary text-white"
+                      : "border-line bg-card text-soft hover:border-line2 hover:text-white"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
             </div>
 
             {loading ? (
@@ -131,7 +163,7 @@ export default function SearchPage() {
               </div>
             ) : (
               <>
-                <MediaGrid items={items} wideColumns={4} />
+                <MediaGrid items={filtered} wideColumns={4} />
                 {totalPages > 1 && (
                   <nav
                     aria-label="Pagination"

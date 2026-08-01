@@ -24,7 +24,9 @@ export default function HomePage() {
         <MyListRail />
         <TopTenRail />
         <TrendingSection />
+        <DevicesSection />
         <FaqSection />
+        <PricingSection />
         <CtaSection />
       </div>
     </>

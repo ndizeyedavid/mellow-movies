@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import {
+  useParams,
+  useNavigate,
+  Link,
+  useSearchParams,
+} from "react-router-dom";
 import { FaStar } from "react-icons/fa6";
 import {
   fetchCaptions,
@@ -12,9 +17,10 @@ import { mapApiItems, mapDetail } from "../api/media";
 import { srtUrlToVttBlob } from "../utils/captions";
 import { showToast } from "../utils/toast";
 import { usePageTitle } from "../hooks/usePageTitle";
+import { useOgMeta } from "../hooks/useOgMeta";
 import {
   clearProgress,
-  getAllProgress,
+  getLastWatchedEpisode,
   getProgress,
   saveProgress,
 } from "../store/progress";
@@ -62,16 +68,19 @@ function nextEpisode(
   return null;
 }
 
-/** Start where the user last left off for this title. */
-function initialPick(item: MediaItem): { season: number; episode: number } {
-  const saved = Object.values(getAllProgress())
-    .filter((e) => e.item.id === item.id)
-    .sort((a, b) => b.updatedAt - a.updatedAt)[0];
-  if (saved) {
-    const m = saved.key.match(/-s(\d+)e(\d+)$/);
-    if (m) return { season: Number(m[1]), episode: Number(m[2]) };
-  }
-  return { season: 1, episode: 1 };
+/**
+ * Start where the user last left off for this title. An explicit
+ * `?se=&ep=` deep link (from the title-page episode picker) wins;
+ * otherwise fall back to saved progress, then episode 1.
+ */
+function initialPick(
+  item: MediaItem,
+  searchParams: URLSearchParams,
+): { season: number; episode: number } {
+  const urlSe = Number(searchParams.get("se"));
+  const urlEp = Number(searchParams.get("ep"));
+  if (urlSe >= 1 && urlEp >= 1) return { season: urlSe, episode: urlEp };
+  return getLastWatchedEpisode(item) ?? { season: 1, episode: 1 };
 }
 
 /**
@@ -138,8 +147,15 @@ export default function WatchPage() {
 
 function WatchContent({ item }: { item: MediaItem }) {
   usePageTitle(item.title);
+  useOgMeta({
+    title: item.title,
+    description: item.description ?? item.plot,
+    image: item.poster,
+    kind: item.type,
+  });
   const navigate = useNavigate();
-  const [pick, setPick] = useState(() => initialPick(item));
+  const [searchParams] = useSearchParams();
+  const [pick, setPick] = useState(() => initialPick(item, searchParams));
   const [streamSnap, setStreamSnap] = useState<{
     key: string;
     srcs: string[];

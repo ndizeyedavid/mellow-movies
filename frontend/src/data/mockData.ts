@@ -23,6 +23,8 @@ export interface MediaItem {
   plot?: string;
   director?: string;
   cast?: string[];
+  /** Rich cast entries (portrait + role) when the detail payload has them. */
+  castDetailed?: Array<{ name: string; role?: string; avatar?: string }>;
   releaseDate?: string;
   language?: string;
   audio?: string[];

@@ -35,6 +35,16 @@ export function mapApiItems(items: ApiItem[], type: MediaType): MediaItem[] {
   return items.map((i) => mapApiItem(i, type));
 }
 
+/**
+ * Search results carry a real `subjectType` (2 = series), so each item gets
+ * its correct kind instead of assuming one type for the whole page.
+ */
+export function mapSearchItems(items: ApiItem[]): MediaItem[] {
+  return items.map((i) =>
+    mapApiItem(i, i.subjectType === 2 ? "show" : "movie"),
+  );
+}
+
 /** Detail-level mapping — fills in the full metadata for the title page. */
 export function mapDetail(data: ApiDetailResponse): MediaItem {
   const subj = data.data.subject;
@@ -44,9 +54,15 @@ export function mapDetail(data: ApiDetailResponse): MediaItem {
   const isShow =
     subj.subjectType === 2 || (seasons.length > 0 && seasons[0].maxEp > 0);
   const genre = subj.genre ?? "";
-  const cast = (data.data.stars ?? [])
-    .map((s) => s.name)
-    .filter((n): n is string => Boolean(n));
+  const stars = data.data.stars ?? [];
+  const cast = stars.map((s) => s.name).filter((n): n is string => Boolean(n));
+  const castDetailed = stars
+    .filter((s) => s.name)
+    .map((s) => ({
+      name: s.name as string,
+      role: s.character || undefined,
+      avatar: s.avatarUrl || undefined,
+    }));
 
   return {
     id: subj.detailPath,
@@ -72,6 +88,7 @@ export function mapDetail(data: ApiDetailResponse): MediaItem {
       .filter(Boolean)
       .join(", "),
     cast,
+    castDetailed,
     releaseDate: subj.releaseDate,
     language: subj.countryName,
     audio: (subj.dubs ?? [])

@@ -66,6 +66,9 @@ export default function StreamPlayer({
   const dashRef = useRef<dashjs.MediaPlayerClass | null>(null);
   const startedRef = useRef(false);
   const hideTimerRef = useRef<number | undefined>(undefined);
+  // Remembers which source already got its one free retry (429s are often
+  // transient — one retry beats jumping straight to the next source).
+  const retriedSrcRef = useRef<string | null>(null);
   // Resume target captured once per mount — the bootstrap effect re-runs on
   // source switches but must not seek again after the first metadata.
   const startAtRef = useRef(startAt);
@@ -148,10 +151,22 @@ export default function StreamPlayer({
       }
       startAtRef.current = undefined;
     };
-    // Fatal failure on the current candidate: move down the list. Once
-    // playback has actually started, stop falling back and show the error.
+    // Fatal failure on the current candidate. Transient CDN errors (429/5xx)
+    // are common — retry the same source once with a short delay, then move
+    // down the list. Once playback has actually started, stop and show error.
     const fail = () => {
-      if (startedRef.current || srcIndex + 1 >= srcs.length) {
+      if (startedRef.current) {
+        setError(true);
+        setWaiting(false);
+        return;
+      }
+      if (retriedSrcRef.current !== src) {
+        retriedSrcRef.current = src;
+        setWaiting(true);
+        window.setTimeout(() => setReloadKey((k) => k + 1), 1200);
+        return;
+      }
+      if (srcIndex + 1 >= srcs.length) {
         setError(true);
         setWaiting(false);
       } else {
