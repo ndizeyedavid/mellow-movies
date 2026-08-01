@@ -367,14 +367,16 @@ export default function StreamPlayer({
         ))}
       </video>
 
-      {/* Center play button */}
+      {/* Center play button — sits above the controls bar (z-30) so it is
+          always pressable; the full-area layer lets clicks pass through to
+          the video, while the circle itself stays interactive. */}
       {paused && !error && (
         <button
           onClick={togglePlay}
           aria-label={`Play ${title}`}
-          className="absolute inset-0 z-10 flex items-center justify-center bg-black/10 transition-colors hover:bg-black/25"
+          className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-black/10 transition-colors hover:bg-black/25"
         >
-          <span className="flex h-20 w-20 items-center justify-center rounded-full border border-white/20 bg-black/50 backdrop-blur-md transition-transform duration-200 hover:scale-105">
+          <span className="pointer-events-auto flex h-20 w-20 items-center justify-center rounded-full border border-white/20 bg-black/50 backdrop-blur-md transition-transform duration-200 hover:scale-105">
             <FaPlay className="ml-1 h-7 w-7 text-white" />
           </span>
         </button>

@@ -11,6 +11,7 @@ import {
   FaCompress,
   FaCheck,
   FaLanguage,
+  FaXmark,
 } from "react-icons/fa6";
 
 export type PlayerMenu = "quality" | "speed" | "audio" | "subs" | null;
@@ -157,8 +158,9 @@ export default function PlayerControls(props: PlayerControlsProps) {
           )}
         </button>
 
-        {/* Volume */}
+        {/* Volume — hidden on phones to keep the bar compact */}
         <VolumeControl
+          className="hidden sm:flex"
           volume={volume}
           muted={muted}
           onVolume={props.onVolume}
@@ -168,16 +170,19 @@ export default function PlayerControls(props: PlayerControlsProps) {
         {/* Time */}
         <span className="ml-1 shrink-0 text-xs font-medium tabular-nums text-white sm:text-sm">
           {fmtTime(currentTime)}
-          <span className="text-muted"> / {fmtTime(duration)}</span>
+          <span className="hidden text-muted sm:inline">
+            {" "}
+            / {fmtTime(duration)}
+          </span>
         </span>
 
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex items-center gap-0.5 sm:gap-1">
           {audioTracks.length > 1 && (
             <button
               onClick={() => props.onMenu(menu === "audio" ? null : "audio")}
               aria-expanded={menu === "audio"}
               aria-haspopup="menu"
-              className={menuBtn(menu === "audio")}
+              className={`${menuBtn(menu === "audio")} hidden sm:flex`}
               title="Audio track"
             >
               <FaLanguage className="h-4 w-4" />
@@ -219,7 +224,7 @@ export default function PlayerControls(props: PlayerControlsProps) {
             onClick={props.onTogglePip}
             aria-label="Picture in picture"
             aria-pressed={isPip}
-            className={iconBtn}
+            className={`${iconBtn} hidden sm:flex`}
             title="Picture in picture"
           >
             <FaDisplay className="h-4 w-4" />
@@ -239,13 +244,22 @@ export default function PlayerControls(props: PlayerControlsProps) {
         </div>
       </div>
 
-      {/* Settings panel */}
+      {/* Settings panel — bottom sheet on phones, floating panel on larger screens */}
       {menu && (
-        <div className="absolute bottom-[68px] right-2 z-30 w-52 overflow-hidden rounded-xl border border-line bg-[#1a1a1a] shadow-2xl sm:right-3 sm:w-56">
-          <p className="px-4 pb-1 pt-3 text-xs font-semibold uppercase tracking-wider text-muted">
-            {MENU_TITLES[menu]}
-          </p>
-          <ul className="max-h-72 overflow-y-auto pb-2">
+        <div className="fixed inset-x-0 bottom-0 z-50 max-h-[55vh] rounded-t-2xl border-t border-line bg-[#161616] shadow-2xl sm:absolute sm:inset-x-auto sm:bottom-[68px] sm:right-3 sm:max-h-none sm:w-56 sm:rounded-xl sm:border sm:bg-[#1a1a1a]">
+          <div className="flex items-center justify-between px-4 pb-1 pt-3">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted">
+              {MENU_TITLES[menu]}
+            </p>
+            <button
+              onClick={() => props.onMenu(null)}
+              aria-label="Close settings"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-soft transition-colors hover:bg-white/10 hover:text-white sm:hidden"
+            >
+              <FaXmark className="h-4 w-4" />
+            </button>
+          </div>
+          <ul className="max-h-[calc(55vh-44px)] overflow-y-auto pb-4 sm:max-h-72 sm:pb-2">
             {menu === "quality" && (
               <>
                 <MenuOption
@@ -408,11 +422,13 @@ function VolumeControl({
   muted,
   onVolume,
   onToggleMute,
+  className = "",
 }: {
   volume: number;
   muted: boolean;
   onVolume(v: number): void;
   onToggleMute(): void;
+  className?: string;
 }) {
   const barRef = useRef<HTMLDivElement>(null);
   const effective = muted ? 0 : volume;
@@ -433,7 +449,7 @@ function VolumeControl({
   };
 
   return (
-    <div className="group/vol flex items-center gap-1.5">
+    <div className={`group/vol flex items-center gap-1.5 ${className}`}>
       <button
         onClick={onToggleMute}
         aria-label={muted ? "Unmute" : "Mute"}
