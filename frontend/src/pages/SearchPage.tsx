@@ -1,6 +1,5 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { FaMagnifyingGlass, FaXmark } from "react-icons/fa6";
 import Container from "../components/ui/Container";
 import MediaGrid from "../components/ui/MediaGrid";
 import { categories, searchMedia, trending } from "../data/mockData";
@@ -21,16 +20,7 @@ const TABS: Array<{ key: TabKey; label: string }> = [
 export default function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q") ?? "";
-  const [input, setInput] = useState(query);
   const [tab, setTab] = useState<TabKey>("all");
-
-  // Sync the input when the URL query changes (e.g. from the navbar search
-  // bar) — adjusted during render per React's derived-state guidance.
-  const [prevQuery, setPrevQuery] = useState(query);
-  if (prevQuery !== query) {
-    setPrevQuery(query);
-    setInput(query);
-  }
 
   const results = useMemo(() => searchMedia(query), [query]);
   const visible = useMemo(
@@ -46,11 +36,6 @@ export default function SearchPage() {
     }),
     [results],
   );
-
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    setSearchParams(input.trim() ? { q: input.trim() } : {});
-  };
 
   const pickCategory = (genre: string) => {
     setTab("all");
