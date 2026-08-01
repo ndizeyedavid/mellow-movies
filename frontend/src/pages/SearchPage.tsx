@@ -6,6 +6,7 @@ import { categories } from "../data/mockData";
 import { fetchHome, searchTitles } from "../api/client";
 import { mapApiItems } from "../api/media";
 import type { MediaItem } from "../data/mockData";
+import { usePageTitle } from "../hooks/usePageTitle";
 
 /**
  * Search results page (/search?q=). Reads the query from the URL so any
@@ -15,6 +16,7 @@ import type { MediaItem } from "../data/mockData";
 export default function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q") ?? "";
+  usePageTitle(query ? `Results for “${query}”` : "Search");
   const [page, setPage] = useState(1);
   const [snap, setSnap] = useState<{
     q: string;

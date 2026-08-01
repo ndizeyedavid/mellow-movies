@@ -11,6 +11,8 @@ interface MediaRailProps {
   cardTo?: (item: MediaItem) => string;
   /** 0..1 progress per item — drives the thin progress bar on each card. */
   progressFor?: (item: MediaItem) => number | undefined;
+  /** Show 1-indexed rank badges on the cards (Top 10 style). */
+  showRank?: boolean;
 }
 
 /**
@@ -23,6 +25,7 @@ export default memo(function MediaRail({
   items,
   cardTo,
   progressFor,
+  showRank,
 }: MediaRailProps) {
   const scrollerRef = useRef<HTMLDivElement>(null);
 
@@ -70,7 +73,7 @@ export default memo(function MediaRail({
         ref={scrollerRef}
         className="-mx-5 flex snap-x snap-mandatory gap-[30px] overflow-x-auto px-5 pb-2 sm:-mx-8 sm:px-8 lg:mx-0 lg:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
-        {items.map((item) => (
+        {items.map((item, i) => (
           <div
             key={item.id}
             data-card
@@ -80,6 +83,7 @@ export default memo(function MediaRail({
               item={item}
               to={cardTo?.(item)}
               progress={progressFor?.(item)}
+              rank={showRank ? i + 1 : undefined}
             />
           </div>
         ))}

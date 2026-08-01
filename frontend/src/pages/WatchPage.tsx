@@ -11,6 +11,7 @@ import {
 import { mapApiItems, mapDetail } from "../api/media";
 import { srtUrlToVttBlob } from "../utils/captions";
 import { showToast } from "../utils/toast";
+import { usePageTitle } from "../hooks/usePageTitle";
 import {
   clearProgress,
   getAllProgress,
@@ -136,6 +137,7 @@ export default function WatchPage() {
 }
 
 function WatchContent({ item }: { item: MediaItem }) {
+  usePageTitle(item.title);
   const navigate = useNavigate();
   const [pick, setPick] = useState(() => initialPick(item));
   const [streamSnap, setStreamSnap] = useState<{

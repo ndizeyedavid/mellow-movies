@@ -3,6 +3,7 @@ import HeroCarousel from "../components/ui/HeroCarousel";
 import MediaRail from "../components/ui/MediaRail";
 import { fetchHome, type ApiSection } from "../api/client";
 import { mapApiItems } from "../api/media";
+import { usePageTitle } from "../hooks/usePageTitle";
 
 /**
  * Movies & Shows page — MovieBox layout:
@@ -10,6 +11,7 @@ import { mapApiItems } from "../api/media";
  * real /home editorial sections.
  */
 export default function BrowsePage() {
+  usePageTitle("Browse");
   const [sections, setSections] = useState<ApiSection[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -45,22 +47,20 @@ export default function BrowsePage() {
 
           {/* Category rows */}
           <div className="flex flex-col gap-12 lg:gap-16 2xl:gap-20">
-            {loading && rows.length === 0 ? (
-              Array.from({ length: 3 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="h-[300px] animate-pulse rounded-xl bg-card2"
-                />
-              ))
-            ) : (
-              rows.map((s) => (
-                <MediaRail
-                  key={s.section}
-                  title={s.section}
-                  items={mapApiItems(s.items.slice(0, 12), "movie")}
-                />
-              ))
-            )}
+            {loading && rows.length === 0
+              ? Array.from({ length: 3 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="h-[300px] animate-pulse rounded-xl bg-card2"
+                  />
+                ))
+              : rows.map((s) => (
+                  <MediaRail
+                    key={s.section}
+                    title={s.section}
+                    items={mapApiItems(s.items.slice(0, 12), "movie")}
+                  />
+                ))}
           </div>
         </div>
       </div>

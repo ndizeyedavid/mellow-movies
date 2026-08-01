@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { FaPlus, FaCheck, FaStar, FaDownload } from "react-icons/fa6";
+import { FaPlus, FaCheck, FaStar } from "react-icons/fa6";
 import { fetchCatalog, fetchDetail } from "../api/client";
 import { mapApiItems, mapDetail } from "../api/media";
 import type { MediaItem } from "../data/mockData";
 import { toggleMyList, useIsInList } from "../store/myList";
 import { showToast } from "../utils/toast";
+import { usePageTitle } from "../hooks/usePageTitle";
 import Container from "../components/ui/Container";
 import Button from "../components/ui/Button";
 import MovieCard from "../components/ui/MovieCard";
+import ShareButton from "../components/ui/ShareButton";
 import playIcon from "../assets/icon-play.svg";
 import backIcon from "../assets/icon-arrow-left.svg";
 
@@ -62,6 +64,8 @@ export default function TitleDetailPage() {
   // Derived: loading until the snapshot matches the requested slug.
   const loading = snap?.id !== id;
   const item = snap && snap.id === id ? snap.item : null;
+
+  usePageTitle(item?.title);
 
   if (loading) {
     return (
@@ -234,6 +238,7 @@ export default function TitleDetailPage() {
             >
               {added ? "In Your List" : "Add to List"}
             </Button>
+            <ShareButton title={item.title} />
           </div>
         </Container>
       </section>

@@ -1,10 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { FaRegBookmark, FaXmark } from "react-icons/fa6";
-import {
-  dismissToast,
-  getToast,
-  subscribeToast,
-} from "../../utils/toast";
+import { dismissToast, getToast, subscribeToast } from "../../utils/toast";
 
 /**
  * Global in-app toast. Rendered once in the layout; any code can show one
@@ -22,7 +18,7 @@ export default function Toast() {
   };
 
   return (
-    <div className="fixed bottom-5 left-4 right-4 z-[80] animate-toast-in sm:left-auto sm:right-6 sm:w-[380px]">
+    <div className="fixed bottom-5 left-4 right-4 z-[80] animate-toast-in sm:bottom-[88px] sm:left-auto sm:right-6 sm:w-[380px]">
       <div className="flex items-start gap-3.5 rounded-xl border border-line2 bg-card p-4 shadow-2xl shadow-black/50">
         <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
           <FaRegBookmark className="h-4 w-4" aria-hidden="true" />

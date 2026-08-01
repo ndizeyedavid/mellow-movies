@@ -5,12 +5,14 @@ import MediaGrid from "../components/ui/MediaGrid";
 import Button from "../components/ui/Button";
 import Container from "../components/ui/Container";
 import { useMyList } from "../store/myList";
+import { usePageTitle } from "../hooks/usePageTitle";
 
 /**
  * "My List" page — titles the user saved from cards or the detail page.
  * Persisted in localStorage so the catalog survives refreshes.
  */
 export default function MyListPage() {
+  usePageTitle("My List");
   const list = useMyList();
 
   return (
@@ -27,9 +29,7 @@ export default function MyListPage() {
             <>
               <p className="text-lg text-muted">
                 Showing{" "}
-                <span className="font-semibold text-white">
-                  {list.length}
-                </span>{" "}
+                <span className="font-semibold text-white">{list.length}</span>{" "}
                 saved {list.length === 1 ? "title" : "titles"}
               </p>
               <MediaGrid items={list} wideColumns={4} />
@@ -44,8 +44,8 @@ export default function MyListPage() {
                   Your list is empty
                 </h2>
                 <p className="max-w-md text-lg text-muted">
-                  Tap the + icon on any movie or show to save it here for
-                  later. You can also hit "Add to List" on any title page.
+                  Tap the + icon on any movie or show to save it here for later.
+                  You can also hit "Add to List" on any title page.
                 </p>
               </div>
               <Link to="/browse">
