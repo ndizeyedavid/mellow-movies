@@ -8,12 +8,8 @@ import {
 } from "react";
 import Hls from "hls.js";
 import * as dashjs from "dashjs";
-import {
-  FaPlay,
-  FaCircleNotch,
-  FaRotateRight,
-  FaTriangleExclamation,
-} from "react-icons/fa6";
+import { FaPlay, FaRotateRight, FaTriangleExclamation } from "react-icons/fa6";
+import BufferingIndicator from "./BufferingIndicator";
 import PlayerControls, {
   type PlayerAudioTrack,
   type PlayerMenu,
@@ -522,15 +518,9 @@ export default function StreamPlayer({
         </button>
       )}
 
-      {/* Loading spinner */}
-      {waiting && !paused && !error && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
-          <FaCircleNotch
-            aria-label="Buffering"
-            className="h-12 w-12 animate-spin text-primary"
-          />
-        </div>
-      )}
+      {/* Buffering indicator — circular progress with a fake percentage so
+          the user always sees something happening while the stream loads. */}
+      {waiting && !paused && !error && <BufferingIndicator />}
 
       {/* Error state */}
       {error && (

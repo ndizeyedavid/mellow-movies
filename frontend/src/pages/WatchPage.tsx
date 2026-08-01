@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { FaStar, FaCircleNotch } from "react-icons/fa6";
+import { FaStar } from "react-icons/fa6";
 import {
   fetchCaptions,
   fetchCatalog,
@@ -12,6 +12,7 @@ import { mapApiItems, mapDetail } from "../api/media";
 import { srtUrlToVttBlob } from "../utils/captions";
 import type { MediaItem } from "../data/mockData";
 import StreamPlayer from "../components/player/StreamPlayer";
+import BufferingIndicator from "../components/player/BufferingIndicator";
 import EpisodePanel from "../components/player/EpisodePanel";
 import MediaRail from "../components/ui/MediaRail";
 import Button from "../components/ui/Button";
@@ -70,9 +71,9 @@ export default function WatchPage() {
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <FaCircleNotch
+        <div
           aria-label="Loading"
-          className="h-10 w-10 animate-spin text-primary"
+          className="h-10 w-10 animate-pulse rounded-full bg-line"
         />
       </div>
     );
@@ -254,11 +255,8 @@ function WatchContent({ item }: { item: MediaItem }) {
         <div className="flex min-w-0 flex-col gap-6">
           <div className="overflow-hidden rounded-2xl border border-line bg-black shadow-2xl">
             {loadingStream ? (
-              <div className="flex aspect-video w-full items-center justify-center bg-black">
-                <FaCircleNotch
-                  aria-label="Loading stream"
-                  className="h-10 w-10 animate-spin text-primary"
-                />
+              <div className="relative aspect-video w-full bg-black">
+                <BufferingIndicator />
               </div>
             ) : streamError || streamSrcs.length === 0 ? (
               <div className="flex aspect-video w-full flex-col items-center justify-center gap-4 bg-black px-6 text-center">
