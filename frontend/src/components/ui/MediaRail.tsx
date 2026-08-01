@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { memo, useRef } from "react";
 import { FaChevronLeft, FaChevronRight } from "react-icons/fa6";
 import type { MediaItem } from "../../data/mockData";
 import MovieCard from "./MovieCard";
@@ -15,7 +15,7 @@ interface MediaRailProps {
  * MovieBox-style category row: heading with arrow controls on the right
  * and a horizontally scrollable, snap-aligned strip of movie cards.
  */
-export default function MediaRail({
+export default memo(function MediaRail({
   title,
   subtitle,
   items,
@@ -79,4 +79,4 @@ export default function MediaRail({
       </div>
     </div>
   );
-}
+});

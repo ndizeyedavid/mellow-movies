@@ -1,4 +1,4 @@
-import { useState, type MouseEvent } from "react";
+import { memo, useState, type MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaPlus, FaCheck } from "react-icons/fa6";
 import type { MediaItem } from "../../data/mockData";
@@ -20,7 +20,12 @@ interface MovieCardProps {
  * Hover: poster zooms, play button fades in, border brightens.
  * Card click opens the detail page; the play overlay opens the watch page.
  */
-export default function MovieCard({ item, rank, to, playTo }: MovieCardProps) {
+export default memo(function MovieCard({
+  item,
+  rank,
+  to,
+  playTo,
+}: MovieCardProps) {
   const [added, setAdded] = useState(false);
   const navigate = useNavigate();
 
@@ -47,6 +52,7 @@ export default function MovieCard({ item, rank, to, playTo }: MovieCardProps) {
             src={item.poster}
             alt={item.title}
             loading="lazy"
+            decoding="async"
             className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
           />
         ) : (
@@ -114,4 +120,4 @@ export default function MovieCard({ item, rank, to, playTo }: MovieCardProps) {
       </div>
     </article>
   );
-}
+});

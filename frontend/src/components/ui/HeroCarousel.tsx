@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FaChevronLeft,
@@ -26,7 +26,7 @@ const glassBtn =
  * centered lower-third content (title, description, action bar),
  * side arrow navigation and segmented red pagination bars.
  */
-export default function HeroCarousel({
+export default memo(function HeroCarousel({
   items,
   autoPlayMs = 6500,
 }: HeroCarouselProps) {
@@ -77,6 +77,8 @@ export default function HeroCarousel({
             key={item.id}
             src={item.poster}
             alt={i === index ? item.title : ""}
+            loading={i === index ? "eager" : "lazy"}
+            decoding="async"
             aria-hidden={i !== index}
             className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${
               i === index ? "opacity-100" : "opacity-0"
@@ -193,4 +195,4 @@ export default function HeroCarousel({
       </div>
     </section>
   );
-}
+});
