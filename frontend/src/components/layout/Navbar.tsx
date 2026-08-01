@@ -4,7 +4,6 @@ import { FaBars, FaXmark, FaAngleDown } from "react-icons/fa6";
 import { NAV_LINKS, MORE_LINKS } from "../../data/mockData";
 import { useMyList } from "../../store/myList";
 import SearchBar from "./SearchBar";
-import logoMark from "../../assets/logo-mark.svg";
 
 /**
  * Navbar (Figma #180:312, compact): 72px tall mobile → 88px wide desktop.
