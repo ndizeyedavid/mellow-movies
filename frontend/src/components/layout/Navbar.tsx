@@ -69,10 +69,10 @@ export default function Navbar() {
           className="flex shrink-0 items-center gap-3"
           aria-label="Mellow Movies home"
         >
-          <img src={logoMark} alt="" className="h-10 w-10 lg:h-11 lg:w-11" />
-          <span className="whitespace-nowrap text-lg font-bold tracking-tight text-white lg:text-xl">
+          <img src={"/logo.png"} alt="" className="w-[130px]" />
+          {/* <span className="whitespace-nowrap text-lg font-bold tracking-tight text-white lg:text-xl">
             Mellow Movies
-          </span>
+          </span> */}
         </Link>
 
         {/* Centered pill nav — desktop only */}

@@ -123,7 +123,10 @@ export default memo(function MovieCard({
 
       <div className="mt-1 flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="truncate text-lg font-semibold text-white lg:text-xl">
+          <h3
+            className="truncate text-lg font-semibold text-white lg:text-xl"
+            title={item.title}
+          >
             {item.title}
           </h3>
           <p className="mt-0.5 truncate text-sm text-muted lg:text-base">
