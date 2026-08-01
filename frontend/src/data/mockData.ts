@@ -34,7 +34,13 @@ export interface NavLink {
 
 export const NAV_LINKS: NavLink[] = [
   { label: "Home", to: "/" },
-  { label: "Movies & Shows", to: "/browse" },
+  { label: "Movie", to: "/movies" },
+  { label: "TV Show", to: "/shows" },
+  { label: "Animation", to: "/browse" },
+];
+
+export const MORE_LINKS: NavLink[] = [
+  { label: "Browse All", to: "/browse" },
   { label: "Support", to: "/support" },
   { label: "Subscriptions", to: "/pricing" },
 ];
