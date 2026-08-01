@@ -1,8 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
-@import 'tailwindcss';
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap");
+@import "tailwindcss";
 
 @theme {
-  --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
 
   /* Figma design tokens — Mellow Movies */
   --color-background: #141414; /* Black/08 */
@@ -16,15 +16,72 @@
   --color-muted: #999999; /* Grey/60 */
   --color-soft: #bfbfbf; /* Grey/75 */
 
-  /* Responsive breakpoints: mobile 320+, tablet 768+, desktop 1200+ */
+  /* Responsive breakpoints: mobile 320+, tablet 768+, laptop 1024+, desktop 1200+ */
+  /* Laptop widths (1280–1536) get the "Laptop" frame scale (~75% of the 1920 desktop design);
+     the full 1920 desktop scale kicks in at 1536px+. */
   --breakpoint-md: 768px;
-  --breakpoint-lg: 1200px;
-  --breakpoint-xl: 1440px;
-  --breakpoint-2xl: 1920px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+  --breakpoint-2xl: 1536px;
 }
 
 html {
   scroll-behavior: smooth;
+}
+
+/* Section vertical rhythm — scales the Figma 80px desktop gap down for laptops
+   (48px mobile → 64px tablet/laptop → 80px 2xl desktop). */
+.section-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+}
+@media (min-width: 768px) {
+  .section-stack {
+    gap: 4rem;
+  }
+}
+@media (min-width: 1536px) {
+  .section-stack {
+    gap: 5rem;
+  }
+}
+
+/* Horizontal page gutters — matches Figma: 20px mobile → 100px laptop →
+   121px 1440+ → 162px at 1900+ (the 1920 desktop frame). */
+.section-gutter {
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
+}
+@media (min-width: 640px) {
+  .section-gutter {
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
+}
+@media (min-width: 1024px) {
+  .section-gutter {
+    padding-left: 3rem;
+    padding-right: 3rem;
+  }
+}
+@media (min-width: 1280px) {
+  .section-gutter {
+    padding-left: 6.25rem; /* 100px */
+    padding-right: 6.25rem;
+  }
+}
+@media (min-width: 1536px) {
+  .section-gutter {
+    padding-left: 7.5625rem; /* 121px */
+    padding-right: 7.5625rem;
+  }
+}
+@media (min-width: 1900px) {
+  .section-gutter {
+    padding-left: 10.125rem; /* 162px */
+    padding-right: 10.125rem;
+  }
 }
 
 body {

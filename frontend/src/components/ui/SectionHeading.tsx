@@ -21,14 +21,14 @@ export default function SectionHeading({
 }: SectionHeadingProps) {
   return (
     <div
-      className={`flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between lg:gap-[100px] ${className}`}
+      className={`flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between xl:gap-[60px] 2xl:gap-[100px] ${className}`}
     >
       <div
         className={`flex flex-col gap-3.5 ${
-          align === "center" ? "mx-auto max-w-3xl text-center" : "max-w-[640px]"
+          align === 'center' ? 'mx-auto max-w-3xl text-center' : 'max-w-[640px]'
         }`}
       >
-        <h2 className="text-2xl font-bold leading-snug text-white md:text-3xl lg:text-[38px]">
+        <h2 className="text-2xl font-bold leading-snug text-white md:text-3xl xl:text-[32px] 2xl:text-[38px]">
           {title}
         </h2>
         {subtitle && (

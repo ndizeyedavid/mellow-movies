@@ -58,8 +58,8 @@ export default function MediaCatalog({
     <>
       <PageHero kicker={kicker} title={title} description={description} />
 
-      <section className="flex flex-col gap-10 py-20 lg:py-24">
-        <div className="mx-auto flex w-full max-w-[1920px] flex-col gap-10 px-5 sm:px-8 lg:px-[60px] xl:px-[121px] 2xl:px-[162px]">
+      <section className="flex flex-col gap-10 py-14 2xl:py-24">
+        <div className="section-gutter mx-auto flex w-full max-w-[1920px] flex-col gap-10">
           {/* Toolbar */}
           <div className="flex flex-wrap items-center justify-between gap-6">
             <p className="text-lg text-muted">

@@ -21,7 +21,7 @@ export default function Navbar({ onSearch }: NavbarProps) {
 
   return (
     <header className="sticky top-0 z-40 border-b border-line/60 bg-background/80 backdrop-blur-xl">
-      <div className="mx-auto flex h-[88px] w-full max-w-[1920px] items-center justify-between px-5 sm:px-8 lg:h-[120px] lg:px-[60px] xl:px-[121px] 2xl:px-[162px]">
+      <div className="section-gutter mx-auto flex h-[88px] w-full max-w-[1920px] items-center justify-between lg:h-[96px] xl:h-[104px] 2xl:h-[120px]">
         {/* Logo */}
         <Link
           to="/"
@@ -49,7 +49,7 @@ export default function Navbar({ onSearch }: NavbarProps) {
               to={link.to}
               end={link.to === "/"}
               className={({ isActive }) =>
-                `rounded-lg px-6 py-3.5 text-lg transition-colors duration-200 ${
+                `rounded-lg px-4 py-3.5 text-lg transition-colors duration-200 xl:px-5 2xl:px-6 ${
                   isActive
                     ? "bg-card font-medium text-white"
                     : "font-normal text-soft hover:text-white"
@@ -62,7 +62,7 @@ export default function Navbar({ onSearch }: NavbarProps) {
         </nav>
 
         {/* Right icons — desktop only */}
-        <div className="hidden items-center gap-[30px] lg:flex">
+        <div className="hidden items-center gap-[30px] xl:flex">
           <button
             aria-label="Search"
             onClick={onSearch}
@@ -100,7 +100,7 @@ export default function Navbar({ onSearch }: NavbarProps) {
 
       {/* Mobile drawer */}
       <div
-        className={`grid overflow-hidden transition-all duration-300 lg:hidden ${
+        className={`grid overflow-hidden transition-all duration-300 xl:hidden ${
           menuOpen ? "grid-rows-[1fr] border-t border-line" : "grid-rows-[0fr]"
         }`}
       >

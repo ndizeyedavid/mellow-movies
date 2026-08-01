@@ -9,8 +9,8 @@ import Button from "../ui/Button";
  */
 export default function FaqSection() {
   return (
-    <section className="mx-auto w-full max-w-[1920px] px-5 sm:px-8 lg:px-[60px] xl:px-[121px] 2xl:px-[162px]">
-      <div className="flex flex-col gap-20">
+    <section className="section-gutter mx-auto w-full max-w-[1920px]">
+      <div className="section-stack">
         <SectionHeading
           title="Frequently Asked Questions"
           subtitle="Everything you need to know about Mellow Movies. Can't find the answer you're looking for? Feel free to contact our team."

@@ -1,6 +1,6 @@
-import { devices } from '../../data/mockData'
-import SectionHeading from '../ui/SectionHeading'
-import DeviceCard from '../ui/DeviceCard'
+import { devices } from "../../data/mockData";
+import SectionHeading from "../ui/SectionHeading";
+import DeviceCard from "../ui/DeviceCard";
 
 /**
  * Devices section from Figma (#184:1045): heading + two rows of
@@ -8,8 +8,8 @@ import DeviceCard from '../ui/DeviceCard'
  */
 export default function DevicesSection() {
   return (
-    <section className="mx-auto w-full max-w-[1920px] px-5 sm:px-8 lg:px-[60px] xl:px-[121px] 2xl:px-[162px]">
-      <div className="flex flex-col gap-20">
+    <section className="section-gutter mx-auto w-full max-w-[1920px]">
+      <div className="section-stack">
         <SectionHeading
           title="We Provide you streaming experience across various devices."
           subtitle="With Mellow Movies, you can enjoy your favorite movies and TV shows anytime, anywhere. Our platform is designed to be compatible with a wide range of devices, ensuring that you never miss a moment of entertainment."
@@ -29,5 +29,5 @@ export default function DevicesSection() {
         </div>
       </div>
     </section>
-  )
+  );
 }
