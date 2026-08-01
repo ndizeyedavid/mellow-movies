@@ -59,60 +59,6 @@ export default function SearchPage() {
 
   return (
     <>
-      {/* Hero with search form */}
-      <section className="pt-8 2xl:pt-16">
-        <Container>
-          <div className="relative overflow-hidden rounded-xl border border-line bg-gradient-to-br from-primary/25 via-surface to-surface px-6 py-10 sm:px-10 lg:py-12 2xl:px-[50px] 2xl:py-[60px]">
-            <div className="flex flex-col gap-6">
-              <div className="flex max-w-3xl flex-col gap-3.5">
-                <span className="text-lg font-medium text-primary">Search</span>
-                <h1 className="text-3xl font-bold leading-snug text-white md:text-4xl 2xl:text-[34px]">
-                  Find your next watch
-                </h1>
-                <p className="text-base leading-snug text-muted lg:text-lg">
-                  Search the full catalog by title, genre, actor or director.
-                </p>
-              </div>
-
-              <form onSubmit={submit} className="max-w-2xl">
-                <label htmlFor="search-input" className="sr-only">
-                  Search movies and shows
-                </label>
-                <div className="flex items-center gap-2.5 rounded-lg border border-line bg-card px-4 py-3 transition-colors duration-200 focus-within:border-line2">
-                  <FaMagnifyingGlass
-                    className="h-5 w-5 shrink-0 text-muted"
-                    aria-hidden="true"
-                  />
-                  <input
-                    id="search-input"
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder="Search movies & shows..."
-                    className="w-full bg-transparent text-base text-white outline-none placeholder:text-muted"
-                  />
-                  {input && (
-                    <button
-                      type="button"
-                      onClick={() => setInput("")}
-                      aria-label="Clear search"
-                      className="shrink-0 text-muted transition-colors hover:text-white"
-                    >
-                      <FaXmark className="h-5 w-5" />
-                    </button>
-                  )}
-                  <button
-                    type="submit"
-                    className="shrink-0 rounded-lg bg-primary px-5 py-2 text-sm font-semibold text-white transition-colors duration-200 hover:bg-primary-dark"
-                  >
-                    Search
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </Container>
-      </section>
-
       <section className="flex flex-col gap-10 py-14 2xl:py-20">
         <Container>
           {query ? (
@@ -172,7 +118,7 @@ export default function SearchPage() {
                   </div>
                 </div>
               ) : (
-                <MediaGrid items={visible} />
+                <MediaGrid items={visible} wideColumns={4} />
               )}
             </>
           ) : (
@@ -195,7 +141,7 @@ export default function SearchPage() {
                   </button>
                 ))}
               </div>
-              <MediaGrid items={trending} />
+              <MediaGrid items={trending} wideColumns={4} />
             </div>
           )}
         </Container>
