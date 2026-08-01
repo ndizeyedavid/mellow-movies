@@ -33,10 +33,10 @@ export default function Hero() {
         className="absolute right-[38%] top-1/4 hidden h-[300px] w-[300px] rounded-full bg-primary/10 blur-[120px] lg:block"
       />
 
-      <div className="section-gutter relative mx-auto flex w-full max-w-[1920px] flex-col items-center pb-20 pt-24 sm:px-8 md:pb-28 md:pt-32 lg:min-h-[560px] lg:pb-24 lg:pt-28 xl:min-h-[640px] xl:pb-32 xl:pt-36 2xl:min-h-[860px] 2xl:pb-40 2xl:pt-44">
-        <div className="flex max-w-[1100px] flex-col items-center gap-8 text-center lg:gap-10 2xl:gap-[50px]">
+      <div className="section-gutter relative mx-auto flex w-full max-w-[1920px] flex-col items-center pb-16 pt-20 sm:px-8 md:pb-20 md:pt-24 lg:min-h-[480px] lg:pb-20 lg:pt-24 xl:min-h-[560px] xl:pb-24 xl:pt-28 2xl:min-h-[640px] 2xl:pb-28 2xl:pt-32">
+        <div className="flex max-w-[1100px] flex-col items-center gap-8 text-center lg:gap-10 2xl:gap-12">
           <div className="flex flex-col gap-3.5">
-            <h1 className="text-4xl font-bold leading-snug text-white sm:text-5xl lg:text-[46px] xl:text-[50px] 2xl:text-[58px]">
+            <h1 className="text-4xl font-bold leading-snug text-white sm:text-5xl lg:text-[44px] xl:text-[46px] 2xl:text-[48px]">
               The Best Streaming Experience
             </h1>
             <p className="mx-auto max-w-4xl text-base leading-snug text-muted lg:text-lg">

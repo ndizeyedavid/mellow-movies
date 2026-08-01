@@ -26,7 +26,7 @@ const deviceIcons: Record<string, ReactNode> = {
  */
 export default function DeviceCard({ device }: { device: Device }) {
   return (
-    <div className="group flex flex-col gap-8 rounded-xl border border-line bg-card p-6 transition-colors duration-300 hover:border-line2 sm:p-8 xl:gap-[50px] xl:p-10 2xl:p-[50px]">
+    <div className="group flex flex-col gap-8 rounded-xl border border-line bg-card p-6 transition-colors duration-300 hover:border-line2 sm:p-8 xl:gap-[50px] xl:p-10 2xl:p-10">
       <div className="flex items-center gap-4">
         <div className="flex h-auto w-auto items-center justify-center rounded-xl border border-card2 bg-background p-4 text-white transition-colors duration-300 group-hover:text-primary">
           {deviceIcons[device.icon] ?? deviceIcons.phone}

@@ -32,7 +32,7 @@ export default function BrowsePage() {
         }
       />
 
-      <section className="section-stack py-14 2xl:py-24">
+      <section className="section-stack py-14 2xl:py-20">
         <div className="section-gutter mx-auto w-full max-w-[1920px]">
           {/* Genre filter pills */}
           <div
@@ -60,7 +60,7 @@ export default function BrowsePage() {
         {/* Movies grid */}
         <div className="section-gutter mx-auto flex w-full max-w-[1920px] flex-col gap-10">
           <div className="flex items-end justify-between gap-6">
-            <h2 className="text-2xl font-bold text-white md:text-3xl xl:text-[32px] 2xl:text-[38px]">
+            <h2 className="text-2xl font-bold text-white md:text-3xl xl:text-[32px] 2xl:text-[34px]">
               Movies
             </h2>
             <Link
@@ -76,7 +76,7 @@ export default function BrowsePage() {
         {/* Shows grid */}
         <div className="section-gutter mx-auto flex w-full max-w-[1920px] flex-col gap-10">
           <div className="flex items-end justify-between gap-6">
-            <h2 className="text-2xl font-bold text-white md:text-3xl xl:text-[32px] 2xl:text-[38px]">
+            <h2 className="text-2xl font-bold text-white md:text-3xl xl:text-[32px] 2xl:text-[34px]">
               TV Shows
             </h2>
             <Link

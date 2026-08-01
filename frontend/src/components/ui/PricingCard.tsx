@@ -15,7 +15,7 @@ interface PricingCardProps {
 export default function PricingCard({ plan, yearly }: PricingCardProps) {
   return (
     <div
-      className={`flex flex-col gap-10 rounded-xl border p-6 transition-colors duration-300 sm:p-8 xl:gap-[50px] xl:p-10 2xl:p-[50px] ${
+      className={`flex flex-col gap-10 rounded-xl border p-6 transition-colors duration-300 sm:p-8 xl:gap-[50px] xl:p-10 2xl:p-10 ${
         plan.highlighted
           ? "border-primary bg-gradient-to-br from-primary/20 via-card to-card"
           : "border-line bg-card hover:border-line2"

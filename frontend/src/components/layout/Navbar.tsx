@@ -11,9 +11,8 @@ interface NavbarProps {
 }
 
 /**
- * Navbar from Figma #180:312: 30px/162px padding, 120px tall.
- * Desktop: logo left, centered pill nav (4px #1F1F1F stroke, radius 12)
- * with an active pill for the current page, search + bell icons right.
+ * Navbar (Figma #180:312, compact): 72px tall mobile → 88px wide desktop.
+ * Logo left, centered pill nav with active state, search + bell icons right.
  * Mobile/tablet: hamburger toggles a slide-down drawer.
  */
 export default function Navbar({ onSearch }: NavbarProps) {
@@ -21,19 +20,15 @@ export default function Navbar({ onSearch }: NavbarProps) {
 
   return (
     <header className="sticky top-0 z-40 border-b border-line/60 bg-background/80 backdrop-blur-xl">
-      <div className="section-gutter mx-auto flex h-[88px] w-full max-w-[1920px] items-center justify-between lg:h-[96px] xl:h-[104px] 2xl:h-[120px]">
+      <div className="section-gutter mx-auto flex h-[72px] w-full max-w-[1920px] items-center justify-between lg:h-[80px] 2xl:h-[88px]">
         {/* Logo */}
         <Link
           to="/"
-          className="flex items-center gap-4"
+          className="flex items-center gap-3"
           aria-label="Mellow Movies home"
         >
-          <img
-            src={logoMark}
-            alt=""
-            className="h-[52px] w-[52px] lg:h-[60px] lg:w-[60px]"
-          />
-          <span className="whitespace-nowrap text-lg font-bold tracking-tight text-white lg:text-[22px]">
+          <img src={logoMark} alt="" className="h-10 w-10 lg:h-11 lg:w-11" />
+          <span className="whitespace-nowrap text-lg font-bold tracking-tight text-white lg:text-xl">
             Mellow Movies
           </span>
         </Link>
@@ -41,7 +36,7 @@ export default function Navbar({ onSearch }: NavbarProps) {
         {/* Centered pill nav — desktop only */}
         <nav
           aria-label="Primary"
-          className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 items-center gap-[30px] rounded-xl border-4 border-card2 bg-surface py-2.5 pl-2.5 pr-10 lg:flex"
+          className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-xl border-[3px] border-card2 bg-surface py-2 pl-2 pr-3 lg:flex lg:gap-3 2xl:gap-6"
         >
           {NAV_LINKS.map((link) => (
             <NavLink
@@ -49,9 +44,9 @@ export default function Navbar({ onSearch }: NavbarProps) {
               to={link.to}
               end={link.to === "/"}
               className={({ isActive }) =>
-                `rounded-lg px-4 py-3.5 text-lg transition-colors duration-200 xl:px-5 2xl:px-6 ${
+                `rounded-lg px-4 py-2 text-sm font-medium transition-colors duration-200 lg:text-base ${
                   isActive
-                    ? "bg-card font-medium text-white"
+                    ? "bg-card text-white"
                     : "font-normal text-soft hover:text-white"
                 }`
               }
@@ -62,20 +57,20 @@ export default function Navbar({ onSearch }: NavbarProps) {
         </nav>
 
         {/* Right icons — desktop only */}
-        <div className="hidden items-center gap-[30px] xl:flex">
+        <div className="hidden items-center gap-6 lg:flex 2xl:gap-8">
           <button
             aria-label="Search"
             onClick={onSearch}
             className="text-white transition-transform duration-200 hover:scale-110 focus-visible:outline-2 focus-visible:outline-primary"
           >
-            <img src={searchIcon} alt="" className="h-[34px] w-[34px]" />
+            <img src={searchIcon} alt="" className="h-7 w-7" />
           </button>
           <button
             aria-label="Notifications"
             onClick={onSearch}
             className="relative text-white transition-transform duration-200 hover:scale-110 focus-visible:outline-2 focus-visible:outline-primary"
           >
-            <img src={bellIcon} alt="" className="h-[34px] w-[34px]" />
+            <img src={bellIcon} alt="" className="h-7 w-7" />
             <span
               className="absolute right-0.5 top-0.5 h-2 w-2 rounded-full bg-primary"
               aria-hidden="true"
@@ -88,7 +83,7 @@ export default function Navbar({ onSearch }: NavbarProps) {
           aria-label={menuOpen ? "Close menu" : "Open menu"}
           aria-expanded={menuOpen}
           onClick={() => setMenuOpen((v) => !v)}
-          className="flex h-11 w-11 items-center justify-center rounded-lg border border-line bg-card text-white lg:hidden"
+          className="flex h-10 w-10 items-center justify-center rounded-lg border border-line bg-card text-white lg:hidden"
         >
           {menuOpen ? (
             <FaXmark className="h-5 w-5" />
@@ -100,12 +95,12 @@ export default function Navbar({ onSearch }: NavbarProps) {
 
       {/* Mobile drawer */}
       <div
-        className={`grid overflow-hidden transition-all duration-300 xl:hidden ${
+        className={`grid overflow-hidden transition-all duration-300 lg:hidden ${
           menuOpen ? "grid-rows-[1fr] border-t border-line" : "grid-rows-[0fr]"
         }`}
       >
         <nav aria-label="Mobile" className="overflow-hidden">
-          <div className="flex flex-col gap-1 px-5 py-6">
+          <div className="flex flex-col gap-1 px-5 py-5">
             {NAV_LINKS.map((link) => (
               <NavLink
                 key={link.to}
@@ -113,7 +108,7 @@ export default function Navbar({ onSearch }: NavbarProps) {
                 end={link.to === "/"}
                 onClick={() => setMenuOpen(false)}
                 className={({ isActive }) =>
-                  `rounded-lg px-5 py-4 text-lg transition-colors duration-200 ${
+                  `rounded-lg px-5 py-3 text-base transition-colors duration-200 ${
                     isActive
                       ? "bg-card font-medium text-white"
                       : "font-normal text-soft hover:bg-card hover:text-white"
@@ -123,22 +118,22 @@ export default function Navbar({ onSearch }: NavbarProps) {
                 {link.label}
               </NavLink>
             ))}
-            <div className="mt-4 flex items-center gap-4 border-t border-line pt-5">
+            <div className="mt-4 flex items-center gap-4 border-t border-line pt-4">
               <button
                 aria-label="Search"
                 onClick={() => {
                   setMenuOpen(false);
                   onSearch();
                 }}
-                className="flex h-12 w-12 items-center justify-center rounded-lg border border-line bg-card"
+                className="flex h-11 w-11 items-center justify-center rounded-lg border border-line bg-card"
               >
-                <img src={searchIcon} alt="" className="h-6 w-6" />
+                <img src={searchIcon} alt="" className="h-5 w-5" />
               </button>
               <button
                 aria-label="Notifications"
-                className="flex h-12 w-12 items-center justify-center rounded-lg border border-line bg-card"
+                className="flex h-11 w-11 items-center justify-center rounded-lg border border-line bg-card"
               >
-                <img src={bellIcon} alt="" className="h-6 w-6" />
+                <img src={bellIcon} alt="" className="h-5 w-5" />
               </button>
             </div>
           </div>

@@ -18,7 +18,7 @@ export default function HomePage() {
   return (
     <>
       <Hero />
-      <div className="section-stack pt-10 md:pt-14 2xl:pt-[120px]">
+      <div className="section-stack pt-10 md:pt-14 2xl:pt-16">
         <TrendingSection onSelect={setSelected} />
         <DevicesSection />
         <FaqSection />

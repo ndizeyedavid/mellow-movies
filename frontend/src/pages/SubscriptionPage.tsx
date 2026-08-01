@@ -15,7 +15,7 @@ export default function SubscriptionPage() {
         title="Subscriptions"
         description="Pick the plan that fits your viewing habits. Every plan includes unlimited access to thousands of movies and shows, with the freedom to switch or cancel at any time."
       />
-      <div className="section-stack py-14 2xl:py-24">
+      <div className="section-stack py-14 2xl:py-20">
         <PricingSection />
         <FaqSection />
         <CtaSection />

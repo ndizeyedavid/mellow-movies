@@ -36,9 +36,9 @@ export default function CtaSection() {
           className="pointer-events-none absolute inset-0 bg-gradient-to-r from-surface via-[#141414]/95 to-transparent"
         />
 
-        <div className="relative flex flex-col items-start gap-10 px-6 py-12 sm:px-10 md:flex-row md:items-center md:justify-between lg:py-14 xl:gap-[60px] 2xl:gap-[100px] 2xl:px-[80px] 2xl:py-[100px]">
+        <div className="relative flex flex-col items-start gap-10 px-6 py-12 sm:px-10 md:flex-row md:items-center md:justify-between lg:py-14 xl:gap-[60px] 2xl:gap-[72px] 2xl:px-[64px] 2xl:py-[72px]">
           <div className="flex max-w-xl flex-col gap-3.5">
-            <h2 className="text-3xl font-bold leading-snug text-white md:text-4xl xl:text-[40px] 2xl:text-[48px]">
+            <h2 className="text-3xl font-bold leading-snug text-white md:text-4xl xl:text-[40px] 2xl:text-[40px]">
               Start your free trial today!
             </h2>
             <p className="text-base leading-snug text-muted lg:text-lg">

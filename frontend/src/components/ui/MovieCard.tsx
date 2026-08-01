@@ -28,7 +28,7 @@ export default function MovieCard({ item, rank, onClick }: MovieCardProps) {
       onClick={() => onClick?.(item)}
       className={`group w-full cursor-pointer rounded-xl border border-line bg-card p-5 transition-all duration-300 hover:border-line2 hover:bg-[#1f1f1f] sm:p-[30px] ${onClick ? "" : "cursor-default"}`}
     >
-      <div className="relative h-[200px] overflow-hidden rounded-lg sm:h-[220px] 2xl:h-[252px]">
+      <div className="relative h-[200px] overflow-hidden rounded-lg sm:h-[220px] 2xl:h-[220px]">
         <img
           src={item.poster}
           alt={item.title}

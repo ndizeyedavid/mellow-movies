@@ -21,7 +21,7 @@ export default function PageHero({
   return (
     <section className="pt-8 2xl:pt-16">
       <Container>
-        <div className="relative overflow-hidden rounded-xl border border-line bg-gradient-to-br from-primary/25 via-surface to-surface px-6 py-10 sm:px-10 lg:py-12 2xl:px-[50px] 2xl:py-[70px]">
+        <div className="relative overflow-hidden rounded-xl border border-line bg-gradient-to-br from-primary/25 via-surface to-surface px-6 py-10 sm:px-10 lg:py-12 2xl:px-[50px] 2xl:py-[60px]">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between xl:gap-[60px] 2xl:gap-[100px]">
             <div className="flex max-w-3xl flex-col gap-3.5">
               {kicker && (
@@ -29,7 +29,7 @@ export default function PageHero({
                   {kicker}
                 </span>
               )}
-              <h1 className="text-3xl font-bold leading-snug text-white md:text-4xl xl:text-[32px] 2xl:text-[38px]">
+              <h1 className="text-3xl font-bold leading-snug text-white md:text-4xl xl:text-[32px] 2xl:text-[34px]">
                 {title}
               </h1>
               <p className="text-base leading-snug text-muted lg:text-lg">

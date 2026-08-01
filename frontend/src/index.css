@@ -29,8 +29,8 @@ html {
   scroll-behavior: smooth;
 }
 
-/* Section vertical rhythm — scales the Figma 80px desktop gap down for laptops
-   (48px mobile → 64px tablet/laptop → 80px 2xl desktop). */
+/* Section vertical rhythm — 48px mobile, 64px from tablet up (capped so
+   desktop sections don't dwarf a 1080p viewport). */
 .section-stack {
   display: flex;
   flex-direction: column;
@@ -39,11 +39,6 @@ html {
 @media (min-width: 768px) {
   .section-stack {
     gap: 4rem;
-  }
-}
-@media (min-width: 1536px) {
-  .section-stack {
-    gap: 5rem;
   }
 }
 

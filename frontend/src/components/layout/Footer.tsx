@@ -22,7 +22,7 @@ const socials = [
 export default function Footer() {
   return (
     <footer className="border-t border-line bg-surface">
-      <div className="section-gutter mx-auto flex max-w-[1920px] flex-col gap-10 py-14 md:gap-16 xl:gap-[70px] 2xl:gap-[100px] 2xl:py-[100px]">
+      <div className="section-gutter mx-auto flex max-w-[1920px] flex-col gap-10 py-14 md:gap-16 xl:gap-[70px] 2xl:gap-[72px] 2xl:py-[80px]">
         {/* Link columns */}
         <div className="grid grid-cols-2 gap-x-6 gap-y-10 md:grid-cols-3 lg:grid-cols-6">
           {footerColumns.map((col) => (

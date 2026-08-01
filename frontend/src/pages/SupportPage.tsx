@@ -93,7 +93,7 @@ export default function SupportPage() {
         <div className="section-gutter mx-auto w-full max-w-[1920px]">
           <div className="grid gap-[30px] lg:grid-cols-3">
             <div className="flex flex-col gap-6 lg:col-span-1">
-              <h2 className="text-2xl font-bold text-white md:text-3xl xl:text-[32px] 2xl:text-[38px]">
+              <h2 className="text-2xl font-bold text-white md:text-3xl xl:text-[32px] 2xl:text-[34px]">
                 Still have questions?
               </h2>
               <p className="text-base leading-snug text-muted lg:text-lg">
