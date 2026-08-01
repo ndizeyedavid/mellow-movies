@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import PageHero from "./PageHero";
 import MediaGrid from "./MediaGrid";
-import MediaModal from "./MediaModal";
 import { FaAngleDown } from "react-icons/fa6";
 import type { MediaItem } from "../../data/mockData";
 
@@ -33,7 +32,6 @@ export default function MediaCatalog({
   description,
   items,
 }: MediaCatalogProps) {
-  const [selected, setSelected] = useState<MediaItem | null>(null);
   const [sort, setSort] = useState<SortKey>("popular");
   const [page, setPage] = useState(1);
 
@@ -93,7 +91,7 @@ export default function MediaCatalog({
             </div>
           </div>
 
-          <MediaGrid items={pageItems} onSelect={setSelected} />
+          <MediaGrid items={pageItems} />
 
           {/* Pagination */}
           {pages > 1 && (
@@ -133,8 +131,6 @@ export default function MediaCatalog({
           )}
         </div>
       </section>
-
-      <MediaModal item={selected} onClose={() => setSelected(null)} />
     </>
   );
 }

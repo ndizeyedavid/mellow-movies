@@ -1,4 +1,5 @@
 import { useState, type MouseEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import { FaPlus, FaCheck } from "react-icons/fa6";
 import type { MediaItem } from "../../data/mockData";
 import playIcon from "../../assets/icon-play.svg";
@@ -6,7 +7,6 @@ import playIcon from "../../assets/icon-play.svg";
 interface MovieCardProps {
   item: MediaItem;
   rank?: number;
-  onClick?: (item: MediaItem) => void;
 }
 
 /**
@@ -14,9 +14,13 @@ interface MovieCardProps {
  * card 296px, padding 30px, poster 252px with rank badge + gradient,
  * title + genre row with a 30px add-to-list icon button.
  * Hover: poster zooms, play button fades in, border brightens.
+ * Clicking the card or the play overlay opens the title detail page.
  */
-export default function MovieCard({ item, rank, onClick }: MovieCardProps) {
+export default function MovieCard({ item, rank }: MovieCardProps) {
   const [added, setAdded] = useState(false);
+  const navigate = useNavigate();
+
+  const openDetail = () => navigate(`/title/${item.id}`);
 
   const toggleAdd = (e: MouseEvent) => {
     e.stopPropagation();
@@ -25,8 +29,8 @@ export default function MovieCard({ item, rank, onClick }: MovieCardProps) {
 
   return (
     <article
-      onClick={() => onClick?.(item)}
-      className={`group w-full cursor-pointer rounded-xl border border-line bg-card p-5 transition-all duration-300 hover:border-line2 hover:bg-[#1f1f1f] sm:p-[30px] ${onClick ? "" : "cursor-default"}`}
+      onClick={openDetail}
+      className="group w-full cursor-pointer rounded-xl border border-line bg-card p-5 transition-all duration-300 hover:border-line2 hover:bg-[#1f1f1f] sm:p-[30px]"
     >
       <div className="relative h-[200px] overflow-hidden rounded-lg sm:h-[220px] 2xl:h-[220px]">
         <img
@@ -49,7 +53,7 @@ export default function MovieCard({ item, rank, onClick }: MovieCardProps) {
           aria-label={`Play ${item.title}`}
           onClick={(e) => {
             e.stopPropagation();
-            onClick?.(item);
+            openDetail();
           }}
           className="absolute inset-0 m-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary/90 opacity-0 backdrop-blur-sm transition-all duration-300 group-hover:opacity-100 hover:bg-primary"
         >

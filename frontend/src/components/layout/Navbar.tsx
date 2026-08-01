@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import { FaBars, FaXmark } from "react-icons/fa6";
 import { NAV_LINKS } from "../../data/mockData";
@@ -17,9 +17,34 @@ interface NavbarProps {
  */
 export default function Navbar({ onSearch }: NavbarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [hidden, setHidden] = useState(false);
+  const lastY = useRef(0);
+
+  // Hide on scroll down, reveal on scroll up (keeps the bar out of the way
+  // while browsing; never hides at the top of the page or with the menu open).
+  useEffect(() => {
+    const onScroll = () => {
+      const y = window.scrollY;
+      const delta = y - lastY.current;
+      if (y < 80) {
+        setHidden(false);
+      } else if (delta > 6 && !menuOpen) {
+        setHidden(true);
+      } else if (delta < -6) {
+        setHidden(false);
+      }
+      lastY.current = y;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [menuOpen]);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-line/60 bg-background/80 backdrop-blur-xl">
+    <header
+      className={`sticky top-0 z-40 border-b border-line/60 bg-background/80 backdrop-blur-xl transition-transform duration-300 ${
+        hidden ? "-translate-y-full" : "translate-y-0"
+      }`}
+    >
       <div className="section-gutter mx-auto flex h-[72px] w-full max-w-[1920px] items-center justify-between lg:h-[80px] 2xl:h-[88px]">
         {/* Logo */}
         <Link

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Outlet } from "react-router-dom";
+import { Outlet, useNavigate } from "react-router-dom";
 import Navbar from "./Navbar";
 import Footer from "./Footer";
 import Modal from "../ui/Modal";
@@ -12,6 +12,7 @@ import playIcon from "../../assets/icon-play.svg";
  * Also owns the global search dialog (mock results over static data).
  */
 export default function Layout() {
+  const navigate = useNavigate();
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
 
@@ -74,7 +75,10 @@ export default function Layout() {
           {results.slice(0, 8).map((item) => (
             <button
               key={item.id}
-              onClick={() => setSearchOpen(false)}
+              onClick={() => {
+                setSearchOpen(false);
+                navigate(`/title/${item.id}`);
+              }}
               className="flex items-center gap-4 rounded-lg border border-line bg-card p-3 text-left transition-colors duration-200 hover:border-line2"
             >
               <img

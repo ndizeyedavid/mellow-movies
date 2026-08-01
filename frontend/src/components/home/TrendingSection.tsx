@@ -4,10 +4,6 @@ import SectionHeading from "../ui/SectionHeading";
 import CarouselControls from "../ui/CarouselControls";
 import MovieCard from "../ui/MovieCard";
 
-interface TrendingSectionProps {
-  onSelect: (item: MediaItem) => void;
-}
-
 const TABS = ["Genres", "Trending", "New Release", "Popular"] as const;
 type Tab = (typeof TABS)[number];
 
@@ -22,7 +18,7 @@ const TAB_POOL: Record<Exclude<Tab, "Genres">, MediaItem[]> = {
  * section heading with carousel arrows + indicators on the right,
  * and a 5-card row (30px gap).
  */
-export default function TrendingSection({ onSelect }: TrendingSectionProps) {
+export default function TrendingSection() {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
   const [tab, setTab] = useState<Tab>("Trending");
@@ -98,11 +94,7 @@ export default function TrendingSection({ onSelect }: TrendingSectionProps) {
               data-card
               className="w-[240px] shrink-0 snap-start sm:w-[260px] lg:w-[237px] xl:w-[296px]"
             >
-              <MovieCard
-                item={item}
-                rank={i + 1}
-                onClick={() => onSelect(item)}
-              />
+              <MovieCard item={item} rank={i + 1} />
             </div>
           ))}
         </div>
