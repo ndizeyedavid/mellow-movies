@@ -131,7 +131,7 @@ export default function TitleDetailPage() {
   return (
     <div className="bg-background">
       {/* ===== Backdrop hero ===== */}
-      <section className="relative h-[440px] w-full overflow-hidden sm:h-[480px] lg:h-[540px] 2xl:h-[580px]">
+      <section className="relative h-[540px] w-full overflow-hidden sm:h-[580px] lg:h-[540px] 2xl:h-[580px]">
         {item.poster ? (
           <img
             src={item.poster}
@@ -233,13 +233,6 @@ export default function TitleDetailPage() {
               }}
             >
               {added ? "In Your List" : "Add to List"}
-            </Button>
-            <Button
-              size="lg"
-              variant="ghost"
-              icon={<FaDownload className="h-5 w-5" />}
-            >
-              Download
             </Button>
           </div>
         </Container>

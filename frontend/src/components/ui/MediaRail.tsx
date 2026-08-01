@@ -37,7 +37,7 @@ export default memo(function MediaRail({
   };
 
   return (
-    <div className="flex flex-col gap-7">
+    <div className="flex flex-col gap-7 section-gutter mx-auto w-full max-w-[1920px]">
       <div className="flex items-end justify-between gap-6">
         <div className="flex min-w-0 flex-col gap-2">
           <h2 className="text-2xl font-bold text-white md:text-3xl xl:text-[32px]">
