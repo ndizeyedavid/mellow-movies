@@ -6,6 +6,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import Hls from "hls.js";
+import * as dashjs from "dashjs";
 import {
   FaPlay,
   FaCircleNotch,
@@ -18,10 +19,17 @@ import PlayerControls, {
   type PlayerSubtitle,
   type QualityLevel,
 } from "./PlayerControls";
-import type { SubtitleTrack } from "../../data/streams";
+
+interface SubtitleTrack {
+  lang: string;
+  label: string;
+  src: string;
+}
 
 interface StreamPlayerProps {
-  src: string;
+  /** Playable candidates in priority order (DASH → HLS → MP4). The player
+   *  tries each in turn until one starts, then keeps it. */
+  srcs: string[];
   poster?: string;
   title?: string;
   subtitleTracks: SubtitleTrack[];
@@ -30,12 +38,14 @@ interface StreamPlayerProps {
 const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
 /**
- * MovieBox-style streaming player built on hls.js:
+ * MovieBox-style streaming player built on dash.js + hls.js:
  * adaptive quality (Auto + all renditions), audio tracks, subtitles,
  * playback speed, seek/volume, fullscreen and picture-in-picture.
+ * DASH is preferred (moviebox's native path), falling back to HLS or
+ * a direct MP4 file when a candidate fails to start.
  */
 export default function StreamPlayer({
-  src,
+  srcs,
   poster,
   title = "Video",
   subtitleTracks,
@@ -43,7 +53,14 @@ export default function StreamPlayer({
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const dashRef = useRef<dashjs.MediaPlayerClass | null>(null);
+  const startedRef = useRef(false);
   const hideTimerRef = useRef<number | undefined>(undefined);
+
+  const [srcIndex, setSrcIndex] = useState(0);
+  const src = srcs[srcIndex] ?? "";
+  const isDashSrc = /\.mpd(?:\?|$)/i.test(src);
+  const isHlsSrc = /\.m3u8(?:\?|$)/i.test(src);
 
   const [reloadKey, setReloadKey] = useState(0);
   const [paused, setPaused] = useState(true);
@@ -68,15 +85,64 @@ export default function StreamPlayer({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPip, setIsPip] = useState(false);
 
-  /* ---------- HLS bootstrap ---------- */
+  /* ---------- Playback bootstrap (DASH, HLS or direct file) ---------- */
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || !src) return;
 
     setWaiting(true);
     setError(false);
+    startedRef.current = false;
 
-    if (Hls.isSupported()) {
+    const onMetadata = () => {
+      setDuration(video.duration || 0);
+      setWaiting(false);
+    };
+    // Fatal failure on the current candidate: move down the list. Once
+    // playback has actually started, stop falling back and show the error.
+    const fail = () => {
+      if (startedRef.current || srcIndex + 1 >= srcs.length) {
+        setError(true);
+        setWaiting(false);
+      } else {
+        setSrcIndex((i) => i + 1);
+      }
+    };
+
+    if (isDashSrc && dashjs.supportsMediaSource()) {
+      const dash = dashjs.MediaPlayer().create();
+      dashRef.current = dash;
+
+      dash.on(dashjs.MediaPlayer.events.PLAYBACK_METADATA_LOADED, () => {
+        onMetadata();
+        const info = dash.getTracksFor("video")[0]?.bitrateList ?? [];
+        if (info.length) {
+          setLevels(
+            info.map((l) => ({
+              height: l.height || 0,
+              bitrate: l.bandwidth || 0,
+            })),
+          );
+        }
+      });
+      dash.on(dashjs.MediaPlayer.events.ERROR, () => fail());
+      dash.on(dashjs.MediaPlayer.events.QUALITY_CHANGE_RENDERED, (e) => {
+        const ev = e as unknown as { newRepresentation?: { index?: number } };
+        setCurrentLevel(ev.newRepresentation?.index ?? -1);
+      });
+
+      dash.initialize(video, src, false);
+      dash.updateSettings({
+        streaming: { buffer: { fastSwitchEnabled: true } },
+      });
+
+      return () => {
+        dash.reset();
+        dashRef.current = null;
+      };
+    }
+
+    if (isHlsSrc && Hls.isSupported()) {
       const hls = new Hls({ enableWorker: true });
       hlsRef.current = hls;
 
@@ -116,8 +182,7 @@ export default function StreamPlayer({
         } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
           hls.recoverMediaError();
         } else {
-          setError(true);
-          setWaiting(false);
+          fail();
         }
       });
 
@@ -130,22 +195,32 @@ export default function StreamPlayer({
       };
     }
 
-    if (video.canPlayType("application/vnd.apple.mpegurl")) {
+    if (isHlsSrc && video.canPlayType("application/vnd.apple.mpegurl")) {
       // Native HLS (Safari)
       video.src = src;
-      video.addEventListener("loadedmetadata", () => {
-        setDuration(video.duration || 0);
-        setWaiting(false);
-      });
+      video.addEventListener("loadedmetadata", onMetadata);
+      video.addEventListener("error", fail);
       return () => {
+        video.removeEventListener("loadedmetadata", onMetadata);
+        video.removeEventListener("error", fail);
         video.removeAttribute("src");
         video.load();
       };
     }
 
-    setError(true);
-    setWaiting(false);
-  }, [src, reloadKey]);
+    // Direct MP4 (or any other file) — play natively. Also the graceful
+    // fallback for HLS when hls.js is unavailable; errors surface through
+    // the video "error" event below.
+    video.src = src;
+    video.addEventListener("loadedmetadata", onMetadata);
+    video.addEventListener("error", fail);
+    return () => {
+      video.removeEventListener("loadedmetadata", onMetadata);
+      video.removeEventListener("error", fail);
+      video.removeAttribute("src");
+      video.load();
+    };
+  }, [src, srcs.length, srcIndex, reloadKey, isDashSrc, isHlsSrc]);
 
   /* ---------- Fullscreen / PiP state ---------- */
   useEffect(() => {
@@ -235,6 +310,16 @@ export default function StreamPlayer({
   };
 
   const onLevelChange = (level: number) => {
+    if (dashRef.current) {
+      if (level >= 0) {
+        dashRef.current.setRepresentationForTypeByIndex("video", level, false);
+      } else {
+        dashRef.current.updateSettings({
+          streaming: { abr: { autoSwitchBitrate: { video: true } } },
+        });
+      }
+      return;
+    }
     if (hlsRef.current) hlsRef.current.currentLevel = level;
   };
 
@@ -333,6 +418,7 @@ export default function StreamPlayer({
         onDoubleClick={onToggleFullscreen}
         onPlay={() => {
           setPaused(false);
+          startedRef.current = true;
           showControls();
         }}
         onPause={() => {
@@ -354,11 +440,11 @@ export default function StreamPlayer({
         onEnded={() => setPaused(true)}
         className="h-full w-full object-contain"
         playsInline
-        crossOrigin="anonymous"
+        crossOrigin={isHlsSrc ? "anonymous" : undefined}
       >
-        {subtitleTracks.map((t) => (
+        {subtitleTracks.map((t, i) => (
           <track
-            key={t.lang}
+            key={`${t.lang}-${i}`}
             kind="subtitles"
             srcLang={t.lang}
             label={t.label}

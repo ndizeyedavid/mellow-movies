@@ -32,18 +32,30 @@ export default function MovieCard({ item, rank, to, playTo }: MovieCardProps) {
     setAdded((v) => !v);
   };
 
+  const meta = [item.year, item.duration, item.rating && `★ ${item.rating}`]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
     <article
       onClick={openDetail}
       className="group w-full cursor-pointer rounded-xl border border-line bg-card p-5 transition-all duration-300 hover:border-line2 hover:bg-[#1f1f1f] sm:p-[30px]"
     >
       <div className="relative h-[200px] overflow-hidden rounded-lg sm:h-[220px] 2xl:h-[220px]">
-        <img
-          src={item.poster}
-          alt={item.title}
-          loading="lazy"
-          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
-        />
+        {item.poster ? (
+          <img
+            src={item.poster}
+            alt={item.title}
+            loading="lazy"
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-card2 to-surface">
+            <span className="text-5xl font-semibold text-white/25">
+              {item.title.charAt(0)}
+            </span>
+          </div>
+        )}
         {/* bottom fade matching Figma gradient overlay */}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-[#1a1a1a] to-transparent" />
 
@@ -80,11 +92,9 @@ export default function MovieCard({ item, rank, to, playTo }: MovieCardProps) {
             {item.title}
           </h3>
           <p className="mt-0.5 truncate text-sm text-muted lg:text-base">
-            {item.genre}
+            {item.genre ?? (item.type === "show" ? "TV Show" : "Movie")}
           </p>
-          <p className="mt-1 text-xs text-soft lg:text-sm">
-            {item.year} · {item.duration} · ★ {item.rating}
-          </p>
+          {meta && <p className="mt-1 text-xs text-soft lg:text-sm">{meta}</p>}
         </div>
         <button
           aria-label={

@@ -9,22 +9,10 @@ interface EpisodePanelProps {
   onSelect(season: number, episode: number): void;
 }
 
-const EPISODES_PER_SEASON = 8;
-
-const episodeTitles = [
-  "Pilot",
-  "The Arrival",
-  "Broken Silence",
-  "Into the Dark",
-  "Crossroads",
-  "The Reckoning",
-  "Fractured",
-  "The Final Piece",
-];
-
 /**
  * MovieBox-style episode picker: season pills with a scrollable
- * episode list; clicking an episode starts playback instantly.
+ * episode list built from the real `seasonMap` (se → maxEp); clicking
+ * an episode starts playback instantly.
  */
 export default function EpisodePanel({
   item,
@@ -33,19 +21,31 @@ export default function EpisodePanel({
   onSelect,
 }: EpisodePanelProps) {
   const [season, setSeason] = useState(activeSeason);
-  const seasonCount = useMemo(() => {
-    const n = item.seasons ? Number.parseInt(item.seasons, 10) : 0;
-    return Number.isFinite(n) && n > 0 ? n : 1;
-  }, [item.seasons]);
 
-  const episodes = Array.from({ length: EPISODES_PER_SEASON }, (_, i) => i + 1);
+  // Keep the selected season valid if the active one changes externally —
+  // adjusted during render per React's derived-state guidance.
+  const [prevActive, setPrevActive] = useState(activeSeason);
+  if (prevActive !== activeSeason) {
+    setPrevActive(activeSeason);
+    setSeason(activeSeason);
+  }
+
+  const seasonMap = item.seasonMap ?? [];
+  const seasonCount = Math.max(1, seasonMap.length);
+  const episodeCount = seasonMap[season - 1]?.maxEp ?? seasonMap[0]?.maxEp ?? 8;
+
+  const episodes = useMemo(
+    () => Array.from({ length: episodeCount }, (_, i) => i + 1),
+    [episodeCount],
+  );
 
   return (
     <div className="rounded-2xl border border-line bg-card">
       <div className="border-b border-line px-6 py-5">
         <h2 className="text-xl font-bold text-white">Episodes</h2>
         <p className="mt-1 text-sm text-muted">
-          {item.title} · {seasonCount} {seasonCount === 1 ? "season" : "seasons"}
+          {item.title} · {seasonCount}{" "}
+          {seasonCount === 1 ? "season" : "seasons"}
         </p>
       </div>
 
@@ -95,10 +95,10 @@ export default function EpisodePanel({
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-base font-semibold text-white">
-                    {episodeTitles[(ep - 1) % episodeTitles.length]}
+                    Episode {ep}
                   </span>
                   <span className="block text-sm text-muted">
-                    Episode {ep} · {38 + ((ep * season) % 21)}m
+                    Season {season}
                   </span>
                 </span>
                 {active && (

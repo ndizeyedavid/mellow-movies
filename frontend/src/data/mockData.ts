@@ -1,30 +1,37 @@
-import poster1 from "../assets/carousel-1.png";
-import poster2 from "../assets/carousel-2.png";
-import poster3 from "../assets/carousel-3.png";
-import poster4 from "../assets/carousel-4.png";
-
 export type MediaType = "movie" | "show";
 
+/**
+ * App-wide media model. List-level data (home sections, catalogs, search)
+ * only fills the basics; the title page merges in the detail payload.
+ */
 export interface MediaItem {
+  /** Route id — the MovieBox slug (detailPath). */
   id: string;
+  /** Subject id used by the streaming endpoints. */
+  subjectId?: string;
   title: string;
-  genre: string;
-  genres: string[];
-  year: number;
-  rating: string;
-  duration?: string;
-  quality?: string;
-  poster: string;
-  description: string;
   type: MediaType;
-  director: string;
-  cast: string[];
-  releaseDate: string;
-  language: string;
-  audio: string[];
-  subtitles: string[];
-  plot: string;
+  genre?: string;
+  genres?: string[];
+  year?: number;
+  rating?: string;
+  duration?: string;
+  durationSeconds?: number;
+  quality?: string;
+  poster?: string;
+  description?: string;
+  plot?: string;
+  director?: string;
+  cast?: string[];
+  releaseDate?: string;
+  language?: string;
+  audio?: string[];
+  subtitles?: string[];
+  /** Number of seasons for shows. */
   seasons?: string;
+  /** Real season → episode layout for shows (from the detail endpoint). */
+  seasonMap?: Array<{ se: number; maxEp: number }>;
+  hasResource?: boolean;
 }
 
 export interface NavLink {
@@ -44,212 +51,6 @@ export const MORE_LINKS: NavLink[] = [
   { label: "Support", to: "/support" },
   { label: "Subscriptions", to: "/pricing" },
 ];
-
-export const POSTERS = [poster1, poster2, poster3, poster4];
-
-const movieTitles: Array<[string, string, number, string, string, string]> = [
-  ["Inception", "Sci-Fi · Action", 2010, "8.8", "2h 28m", "4K"],
-  ["Interstellar", "Sci-Fi · Drama", 2014, "8.7", "2h 49m", "4K"],
-  ["The Dark Knight", "Action · Crime", 2008, "9.0", "2h 32m", "4K"],
-  ["Dune: Part Two", "Sci-Fi · Adventure", 2024, "8.5", "2h 46m", "4K"],
-  ["Oppenheimer", "Biography · Drama", 2023, "8.3", "3h 00m", "4K"],
-  ["The Batman", "Action · Crime", 2022, "7.8", "2h 56m", "4K"],
-  ["Top Gun: Maverick", "Action · Drama", 2022, "8.2", "2h 10m", "4K"],
-  [
-    "Avatar: The Way of Water",
-    "Sci-Fi · Adventure",
-    2022,
-    "7.6",
-    "3h 12m",
-    "4K",
-  ],
-];
-
-const showTitles: Array<[string, string, number, string, string, string]> = [
-  ["Stranger Things", "Sci-Fi · Horror", 2016, "8.6", "5 Seasons", "4K"],
-  ["Breaking Bad", "Crime · Drama", 2008, "9.5", "5 Seasons", "HD"],
-  ["The Crown", "Biography · Drama", 2016, "8.6", "6 Seasons", "4K"],
-  ["The Witcher", "Fantasy · Action", 2019, "8.0", "3 Seasons", "4K"],
-  ["Money Heist", "Crime · Thriller", 2017, "8.2", "5 Seasons", "HD"],
-  ["Squid Game", "Thriller · Drama", 2021, "8.0", "2 Seasons", "HD"],
-  ["The Last of Us", "Action · Drama", 2023, "8.7", "1 Season", "4K"],
-  ["Wednesday", "Comedy · Fantasy", 2022, "8.1", "1 Season", "4K"],
-];
-
-const descriptions = [
-  "A mind-bending journey that keeps you on the edge of your seat from start to finish.",
-  "An epic story of survival, love and humanity that redefines the genre.",
-  "Critically acclaimed masterpiece with unforgettable performances and direction.",
-  "A cinematic spectacle with breathtaking visuals and a gripping narrative.",
-];
-
-const plots = [
-  "When a mysterious phenomenon upends the lives of everyone it touches, an unlikely hero must piece together the truth before it is lost forever. With stunning visuals and a pulse-pounding score, this is a story about memory, choice and the courage to let go.",
-  "Years after the events that changed their world, a family must reunite to face a threat that spans galaxies. A sweeping, emotional epic about sacrifice, hope and the ties that bind us together.",
-  "A quiet town, a sudden disappearance and a truth buried for decades. As the investigation deepens, the line between reality and nightmare begins to blur in this edge-of-your-seat thriller.",
-  "In a world on the brink, one person dares to dream bigger than anyone thought possible. A soaring, character-driven story full of heart, humor and unforgettable moments.",
-];
-
-const directors = [
-  "Christopher Nolan",
-  "Denis Villeneuve",
-  "Greta Gerwig",
-  "David Fincher",
-  "Ridley Scott",
-  "Christopher McQuarrie",
-  "Taika Waititi",
-  "James Cameron",
-];
-
-const castPool = [
-  "Leonardo DiCaprio",
-  "Saoirse Ronan",
-  "Timothée Chalamet",
-  "Zendaya",
-  "Robert Pattinson",
-  "Margot Robbie",
-  "Jenna Ortega",
-  "Pedro Pascal",
-  "Millie Bobby Brown",
-  "Finn Wolfhard",
-  "Bryan Cranston",
-  "Aaron Paul",
-  "Anya Taylor-Joy",
-  "Tom Hardy",
-  "Viola Davis",
-  "Idris Elba",
-];
-
-const languages = [
-  "English",
-  "English",
-  "English",
-  "Korean",
-  "Spanish",
-  "French",
-];
-
-const audioSets = [
-  ["English", "Hindi", "Spanish"],
-  ["English", "French", "German"],
-  ["English", "Spanish", "Portuguese"],
-  ["English", "Hindi", "Arabic"],
-];
-
-const subtitleSets = [
-  ["English", "French", "German", "Spanish", "Portuguese"],
-  ["English", "Arabic", "Hindi", "Spanish"],
-  ["English", "Chinese", "Japanese", "Korean"],
-  ["English", "French", "Italian", "Dutch"],
-];
-
-const months = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
-
-const castFor = (i: number) => [
-  castPool[i % castPool.length],
-  castPool[(i + 3) % castPool.length],
-  castPool[(i + 5) % castPool.length],
-  castPool[(i + 7) % castPool.length],
-];
-
-type MediaBase = Pick<
-  MediaItem,
-  | "id"
-  | "title"
-  | "genre"
-  | "year"
-  | "rating"
-  | "duration"
-  | "quality"
-  | "poster"
-  | "description"
-  | "type"
->;
-
-const metaFor = (base: MediaBase, i: number): MediaItem => ({
-  ...base,
-  genres: base.genre.split(" · "),
-  director: directors[i % directors.length],
-  cast: castFor(i),
-  releaseDate: `${months[i % months.length]} ${10 + (i % 20)}, ${base.year}`,
-  language: languages[i % languages.length],
-  audio: audioSets[i % audioSets.length],
-  subtitles: subtitleSets[i % subtitleSets.length],
-  plot: plots[i % plots.length],
-  seasons: base.type === "show" ? base.duration : undefined,
-});
-
-const pickDescription = (i: number) => descriptions[i % descriptions.length];
-
-export const movies: MediaItem[] = movieTitles.map(
-  ([title, genre, year, rating, duration, quality], i) =>
-    metaFor(
-      {
-        id: `movie-${i + 1}`,
-        title,
-        genre,
-        year,
-        rating,
-        duration,
-        quality,
-        poster: POSTERS[i % POSTERS.length],
-        description: pickDescription(i),
-        type: "movie",
-      },
-      i,
-    ),
-);
-
-export const shows: MediaItem[] = showTitles.map(
-  ([title, genre, year, rating, duration, quality], i) =>
-    metaFor(
-      {
-        id: `show-${i + 1}`,
-        title,
-        genre,
-        year,
-        rating,
-        duration,
-        quality,
-        poster: POSTERS[i % POSTERS.length],
-        description: pickDescription(i),
-        type: "show",
-      },
-      i,
-    ),
-);
-
-export const trending = [...movies.slice(0, 4), ...shows.slice(0, 4)];
-
-export const ALL_MEDIA: MediaItem[] = [...movies, ...shows];
-
-/**
- * Shared search used by the navbar autocomplete and the search results page.
- * Matches against title, genres and cast/director, case-insensitively.
- */
-export function searchMedia(query: string): MediaItem[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return [];
-  return ALL_MEDIA.filter((m) =>
-    [m.title, m.genre, ...m.genres, m.director, ...m.cast]
-      .join(" ")
-      .toLowerCase()
-      .includes(q),
-  );
-}
 
 export const categories: string[] = [
   "Action",

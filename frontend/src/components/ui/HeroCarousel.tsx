@@ -71,17 +71,31 @@ export default function HeroCarousel({
       className="relative h-[420px] w-full overflow-hidden rounded-2xl border border-line sm:h-[480px] lg:h-[540px] 2xl:h-[560px]"
     >
       {/* Stacked poster slides — crossfade */}
-      {items.map((item, i) => (
-        <img
-          key={item.id}
-          src={item.poster}
-          alt={i === index ? item.title : ""}
-          aria-hidden={i !== index}
-          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${
-            i === index ? "opacity-100" : "opacity-0"
-          }`}
-        />
-      ))}
+      {items.map((item, i) =>
+        item.poster ? (
+          <img
+            key={item.id}
+            src={item.poster}
+            alt={i === index ? item.title : ""}
+            aria-hidden={i !== index}
+            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${
+              i === index ? "opacity-100" : "opacity-0"
+            }`}
+          />
+        ) : (
+          <div
+            key={item.id}
+            aria-hidden={i !== index}
+            className={`absolute inset-0 flex h-full w-full items-center justify-center bg-gradient-to-br from-card2 to-surface transition-opacity duration-700 ${
+              i === index ? "opacity-100" : "opacity-0"
+            }`}
+          >
+            <span className="text-8xl font-semibold text-white/10">
+              {item.title.charAt(0)}
+            </span>
+          </div>
+        ),
+      )}
 
       {/* Dark overlay for text contrast */}
       <div
@@ -114,7 +128,10 @@ export default function HeroCarousel({
           {current.title}
         </h2>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-soft sm:text-base">
-          {current.description}
+          {current.description ??
+            `Watch ${current.title} now — one of the most loved ${
+              current.type === "show" ? "series" : "movies"
+            } on Mellow Movies.`}
         </p>
 
         {/* Action bar */}

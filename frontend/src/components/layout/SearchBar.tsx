@@ -11,7 +11,9 @@ import {
   FaArrowRight,
   FaClockRotateLeft,
 } from "react-icons/fa6";
-import { searchMedia, trending, type MediaItem } from "../../data/mockData";
+import { fetchHome, searchTitles, suggestKeywords } from "../../api/client";
+import { mapApiItems } from "../../api/media";
+import type { MediaItem } from "../../data/mockData";
 
 const HISTORY_KEY = "mellow-movies:search-history";
 const MAX_HISTORY = 8;
@@ -35,6 +37,21 @@ function writeHistory(items: string[]) {
   }
 }
 
+/** Popular searches are fetched once and shared between navbar instances. */
+let popularPromise: Promise<MediaItem[]> | null = null;
+
+function loadPopular(): Promise<MediaItem[]> {
+  if (!popularPromise) {
+    popularPromise = fetchHome()
+      .then((res) => {
+        const banner = res.sections.find((s) => s.section === "Banner");
+        return banner ? mapApiItems(banner.items.slice(0, 8), "movie") : [];
+      })
+      .catch(() => []);
+  }
+  return popularPromise;
+}
+
 interface SearchBarProps {
   className?: string;
   /** Called after a result is picked (e.g. to close a mobile drawer). */
@@ -42,9 +59,9 @@ interface SearchBarProps {
 }
 
 /**
- * Inline search bar with autocomplete:
- * - empty query shows popular suggestions,
- * - typing filters the catalog into a dropdown,
+ * Inline search bar with autocomplete backed by the API:
+ * - empty query shows recent + popular searches,
+ * - typing fetches live suggestions and matching titles,
  * - a "See all results" footer and Enter both open the search results page.
  * Keyboard friendly (arrows, Enter, Escape).
  */
@@ -55,12 +72,14 @@ export default function SearchBar({
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
+  const [history, setHistory] = useState<string[]>(readHistory);
+  const [results, setResults] = useState<MediaItem[]>([]);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [popular, setPopular] = useState<MediaItem[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
-  const [history, setHistory] = useState<string[]>(readHistory);
 
   const trimmed = query.trim();
-  const results = searchMedia(trimmed).slice(0, 8);
 
   // Close when clicking outside.
   useEffect(() => {
@@ -73,13 +92,46 @@ export default function SearchBar({
     return () => document.removeEventListener("mousedown", onDown);
   }, []);
 
-  const go = (item: MediaItem) => {
-    saveHistory(trimmed);
-    setOpen(false);
-    setQuery("");
-    onNavigate?.();
-    navigate(`/title/${item.id}`);
-  };
+  // Popular searches for the empty state (single shared fetch).
+  useEffect(() => {
+    let alive = true;
+    loadPopular().then((items) => {
+      if (alive) setPopular(items);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Debounced live search + keyword suggestions.
+  useEffect(() => {
+    let alive = true;
+    const timer = window.setTimeout(() => {
+      if (!trimmed) {
+        if (alive) {
+          setResults([]);
+          setSuggestions([]);
+        }
+        return;
+      }
+      Promise.all([searchTitles(trimmed), suggestKeywords(trimmed)])
+        .then(([searchRes, suggestRes]) => {
+          if (!alive) return;
+          setResults(mapApiItems(searchRes.items.slice(0, 8), "movie"));
+          setSuggestions(
+            suggestRes.suggestions
+              .map((s) => s.title)
+              .filter((t) => t.toLowerCase() !== trimmed.toLowerCase())
+              .slice(0, 4),
+          );
+        })
+        .catch(() => {});
+    }, 250);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [trimmed]);
 
   const saveHistory = (term: string) => {
     const t = term.trim();
@@ -107,19 +159,28 @@ export default function SearchBar({
     writeHistory([]);
   };
 
-  const goToResults = () => {
-    saveHistory(trimmed);
-    setOpen(false);
-    onNavigate?.();
-    navigate(`/search?q=${encodeURIComponent(trimmed)}`);
-  };
-
-  /** Runs a stored keyword: re-saves it (bumps to top) and opens results. */
-  const runHistory = (term: string) => {
-    saveHistory(term);
+  const closeAndGo = () => {
     setOpen(false);
     setQuery("");
     onNavigate?.();
+  };
+
+  const go = (item: MediaItem) => {
+    saveHistory(trimmed);
+    closeAndGo();
+    navigate(`/title/${item.id}`);
+  };
+
+  const goToResults = () => {
+    saveHistory(trimmed);
+    closeAndGo();
+    navigate(`/search?q=${encodeURIComponent(trimmed)}`);
+  };
+
+  /** Runs a stored keyword or suggestion: bumps it to top and opens results. */
+  const runSearch = (term: string) => {
+    saveHistory(term);
+    closeAndGo();
     navigate(`/search?q=${encodeURIComponent(term)}`);
   };
 
@@ -176,12 +237,31 @@ export default function SearchBar({
         <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-line bg-card shadow-2xl">
           {trimmed ? (
             <>
+              {suggestions.length > 0 && (
+                <div className="border-b border-line px-4 py-3">
+                  <p className="pb-2 text-xs font-semibold uppercase tracking-wider text-muted">
+                    Suggestions
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {suggestions.map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => runSearch(s)}
+                        className="rounded-lg border border-line bg-card2 px-3 py-1.5 text-sm text-soft transition-colors duration-150 hover:border-line2 hover:text-white"
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {results.length === 0 ? (
                 <p className="px-4 py-6 text-center text-sm text-muted">
-                  No results for “{trimmed}”
+                  No matching titles for “{trimmed}” — try one of the
+                  suggestions above.
                 </p>
               ) : (
-                <ul className="max-h-80 overflow-y-auto py-2">
+                <ul className="max-h-72 overflow-y-auto py-2">
                   {results.map((item, i) => (
                     <li key={item.id}>
                       <button
@@ -191,17 +271,20 @@ export default function SearchBar({
                           i === highlight ? "bg-card2" : ""
                         }`}
                       >
-                        <img
-                          src={item.poster}
-                          alt=""
-                          className="h-12 w-9 shrink-0 rounded-md object-cover"
-                        />
+                        {item.poster && (
+                          <img
+                            src={item.poster}
+                            alt=""
+                            className="h-12 w-9 shrink-0 rounded-md object-cover"
+                          />
+                        )}
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-semibold text-white">
                             {item.title}
                           </span>
                           <span className="block truncate text-xs text-muted">
-                            {item.genre} · {item.year} · ★ {item.rating}
+                            {item.year ? `${item.year} · ` : ""}★{" "}
+                            {item.rating ?? "N/A"}
                           </span>
                         </span>
                       </button>
@@ -239,7 +322,7 @@ export default function SearchBar({
                     {history.map((term) => (
                       <li key={term} className="group flex items-center">
                         <button
-                          onClick={() => runHistory(term)}
+                          onClick={() => runSearch(term)}
                           className="flex min-w-0 flex-1 items-center gap-3 px-4 py-2 text-left transition-colors duration-150 hover:bg-card2"
                         >
                           <FaClockRotateLeft
@@ -265,30 +348,38 @@ export default function SearchBar({
               <p className="px-4 pb-2 pt-3 text-xs font-semibold uppercase tracking-wider text-muted">
                 Popular Searches
               </p>
-              <ul className="max-h-72 overflow-y-auto">
-                {trending.map((item) => (
-                  <li key={item.id}>
-                    <button
-                      onClick={() => go(item)}
-                      className="flex w-full items-center gap-3 px-4 py-2 text-left transition-colors duration-150 hover:bg-card2"
-                    >
-                      <img
-                        src={item.poster}
-                        alt=""
-                        className="h-12 w-9 shrink-0 rounded-md object-cover"
-                      />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-semibold text-white">
-                          {item.title}
+              {popular.length === 0 ? (
+                <p className="px-4 pb-2 pt-1 text-sm text-muted">
+                  Search to find your next watch.
+                </p>
+              ) : (
+                <ul className="max-h-72 overflow-y-auto">
+                  {popular.map((item) => (
+                    <li key={item.id}>
+                      <button
+                        onClick={() => go(item)}
+                        className="flex w-full items-center gap-3 px-4 py-2 text-left transition-colors duration-150 hover:bg-card2"
+                      >
+                        {item.poster && (
+                          <img
+                            src={item.poster}
+                            alt=""
+                            className="h-12 w-9 shrink-0 rounded-md object-cover"
+                          />
+                        )}
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold text-white">
+                            {item.title}
+                          </span>
+                          <span className="block truncate text-xs text-muted">
+                            {item.genre ?? "Movie"} · ★ {item.rating ?? "N/A"}
+                          </span>
                         </span>
-                        <span className="block truncate text-xs text-muted">
-                          {item.genre} · ★ {item.rating}
-                        </span>
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
         </div>
