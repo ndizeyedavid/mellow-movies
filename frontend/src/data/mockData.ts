@@ -234,6 +234,23 @@ export const shows: MediaItem[] = showTitles.map(
 
 export const trending = [...movies.slice(0, 4), ...shows.slice(0, 4)];
 
+export const ALL_MEDIA: MediaItem[] = [...movies, ...shows];
+
+/**
+ * Shared search used by the navbar autocomplete and the search results page.
+ * Matches against title, genres and cast/director, case-insensitively.
+ */
+export function searchMedia(query: string): MediaItem[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  return ALL_MEDIA.filter((m) =>
+    [m.title, m.genre, ...m.genres, m.director, ...m.cast]
+      .join(" ")
+      .toLowerCase()
+      .includes(q),
+  );
+}
+
 export const categories: string[] = [
   "Action",
   "Adventure",

@@ -5,10 +5,8 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import { useNavigate } from "react-router-dom";
-import { FaMagnifyingGlass, FaXmark } from "react-icons/fa6";
-import { movies, shows, type MediaItem } from "../../data/mockData";
-
-const ALL_ITEMS: MediaItem[] = [...movies, ...shows];
+import { FaMagnifyingGlass, FaXmark, FaArrowRight } from "react-icons/fa6";
+import { searchMedia, trending, type MediaItem } from "../../data/mockData";
 
 interface SearchBarProps {
   className?: string;
@@ -17,8 +15,11 @@ interface SearchBarProps {
 }
 
 /**
- * Inline search bar: types to filter the catalog and shows a dropdown of
- * matching titles. Keyboard friendly (arrows, Enter, Escape).
+ * Inline search bar with autocomplete:
+ * - empty query shows popular suggestions,
+ * - typing filters the catalog into a dropdown,
+ * - a "See all results" footer and Enter both open the search results page.
+ * Keyboard friendly (arrows, Enter, Escape).
  */
 export default function SearchBar({ className = "", onNavigate }: SearchBarProps) {
   const [query, setQuery] = useState("");
@@ -28,13 +29,7 @@ export default function SearchBar({ className = "", onNavigate }: SearchBarProps
   const navigate = useNavigate();
 
   const trimmed = query.trim();
-  const results = trimmed
-    ? ALL_ITEMS.filter(
-        (m) =>
-          m.title.toLowerCase().includes(trimmed.toLowerCase()) ||
-          m.genre.toLowerCase().includes(trimmed.toLowerCase()),
-      ).slice(0, 8)
-    : [];
+  const results = searchMedia(trimmed).slice(0, 8);
 
   // Close when clicking outside.
   useEffect(() => {
@@ -54,11 +49,18 @@ export default function SearchBar({ className = "", onNavigate }: SearchBarProps
     navigate(`/title/${item.id}`);
   };
 
+  const goToResults = () => {
+    setOpen(false);
+    onNavigate?.();
+    navigate(`/search?q=${encodeURIComponent(trimmed)}`);
+  };
+
   const onKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Escape") {
       setOpen(false);
-    } else if (e.key === "Enter" && results.length > 0) {
-      go(results[highlight % results.length]);
+    } else if (e.key === "Enter" && trimmed) {
+      e.preventDefault();
+      goToResults();
     } else if (e.key === "ArrowDown" && results.length > 0) {
       e.preventDefault();
       setHighlight((h) => (h + 1) % results.length);
@@ -99,40 +101,84 @@ export default function SearchBar({ className = "", onNavigate }: SearchBarProps
         )}
       </div>
 
-      {open && trimmed && (
+      {open && (
         <div className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-line bg-card shadow-2xl">
-          {results.length === 0 ? (
-            <p className="px-4 py-6 text-center text-sm text-muted">
-              No results for “{trimmed}”
-            </p>
+          {trimmed ? (
+            <>
+              {results.length === 0 ? (
+                <p className="px-4 py-6 text-center text-sm text-muted">
+                  No results for “{trimmed}”
+                </p>
+              ) : (
+                <ul className="max-h-80 overflow-y-auto py-2">
+                  {results.map((item, i) => (
+                    <li key={item.id}>
+                      <button
+                        onClick={() => go(item)}
+                        onMouseEnter={() => setHighlight(i)}
+                        className={`flex w-full items-center gap-3 px-3 py-2 text-left transition-colors duration-150 ${
+                          i === highlight ? "bg-card2" : ""
+                        }`}
+                      >
+                        <img
+                          src={item.poster}
+                          alt=""
+                          className="h-12 w-9 shrink-0 rounded-md object-cover"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold text-white">
+                            {item.title}
+                          </span>
+                          <span className="block truncate text-xs text-muted">
+                            {item.genre} · {item.year} · ★ {item.rating}
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <button
+                onClick={goToResults}
+                className="flex w-full items-center justify-between border-t border-line bg-card2/60 px-4 py-3 text-left text-sm font-medium text-white transition-colors duration-150 hover:bg-card2"
+              >
+                <span>
+                  See all results for{" "}
+                  <span className="text-primary">“{trimmed}”</span>
+                </span>
+                <FaArrowRight className="h-3.5 w-3.5 text-muted" />
+              </button>
+            </>
           ) : (
-            <ul className="max-h-80 overflow-y-auto py-2">
-              {results.map((item, i) => (
-                <li key={item.id}>
-                  <button
-                    onClick={() => go(item)}
-                    onMouseEnter={() => setHighlight(i)}
-                    className={`flex w-full items-center gap-3 px-3 py-2 text-left transition-colors duration-150 ${
-                      i === highlight ? "bg-card2" : ""
-                    }`}
-                  >
-                    <img
-                      src={item.poster}
-                      alt=""
-                      className="h-12 w-9 shrink-0 rounded-md object-cover"
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold text-white">
-                        {item.title}
+            <div className="py-3">
+              <p className="px-4 pb-2 pt-1 text-xs font-semibold uppercase tracking-wider text-muted">
+                Popular Searches
+              </p>
+              <ul className="max-h-80 overflow-y-auto">
+                {trending.map((item) => (
+                  <li key={item.id}>
+                    <button
+                      onClick={() => go(item)}
+                      className="flex w-full items-center gap-3 px-4 py-2 text-left transition-colors duration-150 hover:bg-card2"
+                    >
+                      <img
+                        src={item.poster}
+                        alt=""
+                        className="h-12 w-9 shrink-0 rounded-md object-cover"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold text-white">
+                          {item.title}
+                        </span>
+                        <span className="block truncate text-xs text-muted">
+                          {item.genre} · ★ {item.rating}
+                        </span>
                       </span>
-                      <span className="block truncate text-xs text-muted">
-                        {item.genre} · {item.year} · ★ {item.rating}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
       )}
