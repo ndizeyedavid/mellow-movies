@@ -91,6 +91,12 @@ movies/
 │   │   ├── hooks/           # usePageTitle, useOgMeta — magic in disguise
 │   │   └── utils/           # toast.ts, captions.ts (SRT→VTT sorcery)
 │   └── public/              # manifest, service worker, logos, vibes
+├── scripts/                 # the local dev engine room
+│   ├── start-dev.ps1        # kill old, boot backend + frontend, log everything
+│   └── stop-dev.ps1         # the cleanup crew (catches orphaned workers too)
+├── dev.bat                  # the one-click orchestrator (start/stop/restart)
+├── .logs/                   # where the backend/frontend keep their diaries
+├── CHANGELOG.md             # our humble history book
 └── README.md                # you are here (probably)
 ```
 
@@ -103,7 +109,29 @@ movies/
 - Node.js (the newer the better, like most things)
 - Python 3.11+ (the old ones are getting clingy)
 
-### 1. Backend (the plug)
+### 1. Zero-Effort Launch (The New Way)
+
+Everything runs **fully local** now. No servers, no deploys, no geo-gating drama. One double-click:
+
+```bash
+dev.bat            # shows a menu: start / stop / restart
+```
+
+Or skip the menu and pass a command straight in:
+
+```bash
+dev.bat start      # closes anything already running, then boots backend + frontend
+dev.bat stop       # closes the backend and frontend
+dev.bat restart    # stop, then start again
+```
+
+First run installs frontend deps automatically. Logs go in `.logs\` (backend.log, frontend.log, plus `.err.log` twins for the drama). The backend picks port `8000`, the frontend `5173` — closing the old instances before starting is handled for you, even the sneaky orphaned uvicorn workers.
+
+Then open `http://localhost:5173` and try not to say "wow" out loud.
+
+> Manual mode (the old way) still works if you're into that:
+
+### 2. Backend (the plug) — manual
 
 ```bash
 cd backend
@@ -113,7 +141,7 @@ python -m uvicorn api:app --host 0.0.0.0 --port 8000
 
 If it works, you'll see Uvicorn's beautiful ASCII art. If it doesn't, it's not you, it's the upstream API having feelings.
 
-### 2. Frontend (the face)
+### 3. Frontend (the face) — manual
 
 ```bash
 cd frontend
@@ -121,17 +149,18 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173` and try not to say "wow" out loud.
+### 4. The other scripts
 
-### 3. The other scripts
-
-| Script             | What it does                                     |
-| :----------------- | :----------------------------------------------- |
-| `npm run dev`      | Vite dev server with magic instant refresh       |
-| `npm run build`    | `tsc -b && vite build` — the moment of truth     |
-| `npm run lint`     | ESLint judges your code so you don't have to     |
-| `npm run preview`  | Previews the built app (build first, duh)        |
-| `python verify.py` | Backend self-check that claims everything's fine |
+| Script                  | What it does                                     |
+| :---------------------- | :----------------------------------------------- |
+| `dev.bat`               | The orchestrator — menu + `start/stop/restart`   |
+| `scripts\start-dev.ps1` | Kills old servers, boots backend + frontend      |
+| `scripts\stop-dev.ps1`  | Kills backend + frontend (workers included)      |
+| `npm run dev`           | Vite dev server with magic instant refresh       |
+| `npm run build`         | `tsc -b && vite build` — the moment of truth     |
+| `npm run lint`          | ESLint judges your code so you don't have to     |
+| `npm run preview`       | Previews the built app (build first, duh)        |
+| `python verify.py`      | Backend self-check that claims everything's fine |
 
 ---
 
@@ -151,7 +180,7 @@ Open `http://localhost:5173` and try not to say "wow" out loud.
 
 ---
 
-## The Great Deployment War (Read at your own risk)
+## The Great Deployment War (feat. The Server of Shame)
 
 Here's the saga, because this repo earned it:
 
@@ -159,10 +188,14 @@ Here's the saga, because this repo earned it:
 2. **Streams died.** `hasResource: false`. Empty. Silent. Cold.
 3. **The culprit:** not your code. Not Render. The upstream API **geo-gates stream URLs by request IP**. Your residential South African IP? Works. Render's AWS datacenter IP? Blocked harder than a regional Netflix title.
 4. **Attempted escape:** switched Render regions — Frankfurt, Singapore... AWS everywhere. All denied.
-5. **Current status:** hunting for a free host whose IP the upstream hasn't personally banned (or a Cloudflare Worker, the great equalizer).
-6. **Lesson learned:** the internet is a series of middlemen blocking each other's middlemen.
+5. **The Server of Shame was born.** Every host we chased became another name on a growing graveyard:
+   - **Fly.io** — sounded promising, then broke our heart with a bill ("not free" it said, with tears in its eyes).
+   - **PythonAnywhere** — "looks promising", we said. Then discovered the free plan **whitelists outbound hosts** and `moviebox.ph` / `aoneroom.com` were not invited to that party. The API couldn't even talk to the plug it was supposed to wrap.
+   - **Every free tier** we auditioned either geo-blocked us, whitelisted us out of existence, or demanded a credit card like it was a nightclub.
+6. **Current status:** **fully local, forever.** No more chasing servers. The repo now ships `dev.bat` + `scripts/` — one double-click boots the backend and frontend on your own machine, where your residential IP is _exactly_ the IP the upstream API loves.
+7. **Lesson learned:** the internet is a series of middlemen blocking each other's middlemen. The only IP that was never blocked was the one in your own house.
 
-> **Moral of the story:** Deploying is easy. Deploying somewhere the upstream doesn't hate you is a full-time job.
+> **Moral of the story:** Deploying is easy. Deploying somewhere the upstream doesn't hate you is a full-time job. Running it at home? Free. Forever. No shame.
 
 ---
 
@@ -181,7 +214,10 @@ A: Because the user is the database. Zero server costs. Peak efficiency. Don't t
 A: Because `api.py` is 560 lines of pure, unfiltered confidence. Refactoring is for people with time.
 
 **Q: Why did the streams break in production but not locally?**
-A: Read the "Great Deployment War" section above and pour one out for us.
+A: Read the "Great Deployment War" section above and pour one out for us. Then run `dev.bat` and enjoy them locally, guilt-free.
+
+**Q: Why is everything local now?**
+A: The upstream API loves residential IPs and despises datacenter IPs. Your house has a residential IP. Case closed. The servers have been retired to the Server of Shame, where they can no longer hurt anyone.
 
 **Q: Will this run on my toaster?**
 A: The frontend, maybe. The backend, no. The toaster has standards.

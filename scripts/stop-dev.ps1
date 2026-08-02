@@ -1,5 +1,5 @@
 # ============================================================
-#  MovieBox local dev stopper
+#  MellowMovies local dev stopper
 #  Closes backend (8000) and frontend (5173) if running.
 # ============================================================
 $BackendPort  = 8000

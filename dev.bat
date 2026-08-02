@@ -1,5 +1,5 @@
 @echo off
-title MovieBox Dev Launcher
+title Mellow Movies Dev Launcher
 cd /d "%~dp0"
 
 if /i "%~1"=="start"   goto start
@@ -9,7 +9,7 @@ if /i "%~1"=="restart" goto restart
 :menu
 cls
 echo ============================================
-echo   MovieBox Dev Launcher
+echo   Mellow Movies Dev Launcher
 echo ============================================
 echo   1) Start dev servers
 echo   2) Stop dev servers

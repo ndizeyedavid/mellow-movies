@@ -1,5 +1,5 @@
 # ============================================================
-#  MovieBox local dev runner
+#  MellowMovies local dev runner
 #  1. Closes any backend (8000) / frontend (5173) already up
 #  2. Boots backend (uvicorn) + frontend (vite) fresh
 #  Logs: .logs\  inside the project. Stop: dev.bat (root)
