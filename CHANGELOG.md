@@ -13,6 +13,7 @@ The deployment war is over. We lost. We won.
 - **New `scripts/` directory** — `start-dev.ps1` (kills any running backend/frontend, then boots both fresh) and `stop-dev.ps1` (the cleanup crew).
 - **Orphan-killer upgrade:** closing a running backend no longer leaves ghost uvicorn workers holding port 8000 hostage. The sweep now hunts `spawn_main` orphans, uvicorn reloaders, and vite, double-passes, then verifies the ports are actually free.
 - **First-run convenience:** `start-dev.ps1` auto-runs `npm install` when `node_modules` is missing.
+- **Auto-open:** once the servers are up, the start script launches the **installed PWA** (Mellow Movies) in its own window — falls back to a plain browser tab if the PWA isn't installed.
 - **Logging:** backend and frontend output now lands in `.logs\` (`backend.log`, `frontend.log`, plus `.err.log` twins for the drama).
 - **README updated** — new "Zero-Effort Launch" section and the saga now has its proper ending, featuring the Server of Shame.
 

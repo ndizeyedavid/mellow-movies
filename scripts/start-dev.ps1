@@ -99,6 +99,33 @@ Start-Process -FilePath "npm.cmd" `
 
 Start-Sleep -Seconds 4
 
+# ---------- open the app ----------
+function Open-App {
+    # Look for the installed PWA (Edge + Chrome put shortcuts in different spots)
+    $dirs = @(
+        (Join-Path $env:LOCALAPPDATA "Microsoft\Windows\Application Shortcuts"),
+        (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Chrome Apps")
+    )
+    $candidates = foreach ($d in $dirs) {
+        Get-ChildItem -Path $d -Recurse -Filter "*.lnk" -ErrorAction SilentlyContinue
+    }
+
+    # Prefer a shortcut that matches the full app name, then looser matches
+    $lnk = $candidates | Where-Object { $_.BaseName -match "mellow" -and $_.BaseName -match "movies" } | Select-Object -First 1
+    if (-not $lnk) { $lnk = $candidates | Where-Object { $_.BaseName -match "movies" } | Select-Object -First 1 }
+    if (-not $lnk) { $lnk = $candidates | Where-Object { $_.BaseName -match "mellow" } | Select-Object -First 1 }
+
+    if ($lnk) {
+        Write-Host ("Opening installed PWA: {0}" -f $lnk.BaseName) -ForegroundColor Green
+        Start-Process $lnk.FullName
+    } else {
+        Write-Host "Opening browser -> http://localhost:$FrontendPort" -ForegroundColor Green
+        Start-Process "http://localhost:$FrontendPort"
+    }
+}
+
+Open-App
+
 Write-Host ""
 Write-Host "Frontend : http://localhost:$FrontendPort" -ForegroundColor Green
 Write-Host "Backend  : http://localhost:$BackendPort   (API docs: /docs)" -ForegroundColor Green

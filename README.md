@@ -125,7 +125,7 @@ dev.bat stop       # closes the backend and frontend
 dev.bat restart    # stop, then start again
 ```
 
-First run installs frontend deps automatically. Logs go in `.logs\` (backend.log, frontend.log, plus `.err.log` twins for the drama). The backend picks port `8000`, the frontend `5173` — closing the old instances before starting is handled for you, even the sneaky orphaned uvicorn workers.
+First run installs frontend deps automatically. Logs go in `.logs\` (backend.log, frontend.log, plus `.err.log` twins for the drama). The backend picks port `8000`, the frontend `5173` — closing the old instances before starting is handled for you, even the sneaky orphaned uvicorn workers. And when everything's up, it **auto-opens the installed PWA** (Mellow Movies) in its own window — or falls back to opening the browser tab.
 
 Then open `http://localhost:5173` and try not to say "wow" out loud.
 
@@ -151,16 +151,16 @@ npm run dev
 
 ### 4. The other scripts
 
-| Script                  | What it does                                     |
-| :---------------------- | :----------------------------------------------- |
-| `dev.bat`               | The orchestrator — menu + `start/stop/restart`   |
-| `scripts\start-dev.ps1` | Kills old servers, boots backend + frontend      |
-| `scripts\stop-dev.ps1`  | Kills backend + frontend (workers included)      |
-| `npm run dev`           | Vite dev server with magic instant refresh       |
-| `npm run build`         | `tsc -b && vite build` — the moment of truth     |
-| `npm run lint`          | ESLint judges your code so you don't have to     |
-| `npm run preview`       | Previews the built app (build first, duh)        |
-| `python verify.py`      | Backend self-check that claims everything's fine |
+| Script                  | What it does                                               |
+| :---------------------- | :--------------------------------------------------------- |
+| `dev.bat`               | The orchestrator — menu + `start/stop/restart`             |
+| `scripts\start-dev.ps1` | Kills old servers, boots backend + frontend, opens the PWA |
+| `scripts\stop-dev.ps1`  | Kills backend + frontend (workers included)                |
+| `npm run dev`           | Vite dev server with magic instant refresh                 |
+| `npm run build`         | `tsc -b && vite build` — the moment of truth               |
+| `npm run lint`          | ESLint judges your code so you don't have to               |
+| `npm run preview`       | Previews the built app (build first, duh)                  |
+| `python verify.py`      | Backend self-check that claims everything's fine           |
 
 ---
 
