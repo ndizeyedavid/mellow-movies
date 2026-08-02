@@ -1,0 +1,14 @@
+[project]
+name = "mellow-movies-backend"
+version = "0.1.0"
+description = "FastAPI backend for Mellow Movies"
+requires-python = "==3.11.*"
+dependencies = [
+  "fastapi==0.110.0",
+  "fastapi-cli>=0.0.16",
+  "httpx==0.28.1",
+  "uvicorn[standard]==0.27.1",
+]
+
+[tool.fastapi]
+entrypoint = "api:app"
