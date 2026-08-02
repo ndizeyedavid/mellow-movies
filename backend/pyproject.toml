@@ -14,6 +14,9 @@ dependencies = [
   "uvicorn[standard]==0.27.1",
 ]
 
+[project.scripts]
+fastapi = "fastapi_cli.cli:main"
+
 [tool.fastapi]
 entrypoint = "api:app"
 
