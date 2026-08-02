@@ -1,0 +1,8 @@
+LICENSE
+api.py
+pyproject.toml
+mellow_movies_backend.egg-info/PKG-INFO
+mellow_movies_backend.egg-info/SOURCES.txt
+mellow_movies_backend.egg-info/dependency_links.txt
+mellow_movies_backend.egg-info/requires.txt
+mellow_movies_backend.egg-info/top_level.txt
