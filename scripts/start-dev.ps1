@@ -73,9 +73,9 @@ if (-not (Test-Path $py)) {
     exit 1
 }
 
-Write-Host "== Starting backend  ->  http://localhost:$BackendPort =="
+Write-Host "== Starting backend  ->  http://localhost:$BackendPort (LAN: http://<PC-IP>:$BackendPort) =="
 Start-Process -FilePath $py `
-    -ArgumentList "-m","uvicorn","api:app","--host","127.0.0.1","--port","$BackendPort","--reload" `
+    -ArgumentList "-m","uvicorn","api:app","--host","0.0.0.0","--port","$BackendPort","--reload" `
     -WorkingDirectory $Backend `
     -RedirectStandardOutput (Join-Path $LogDir "backend.log") `
     -RedirectStandardError  (Join-Path $LogDir "backend.err.log") `
@@ -89,9 +89,9 @@ if (-not (Test-Path (Join-Path $Frontend "node_modules"))) {
     Pop-Location
 }
 
-Write-Host "== Starting frontend ->  http://localhost:$FrontendPort =="
+Write-Host "== Starting frontend ->  http://localhost:$FrontendPort (LAN: http://<PC-IP>:$FrontendPort) =="
 Start-Process -FilePath "npm.cmd" `
-    -ArgumentList "run","dev","--","--port","$FrontendPort","--strictPort" `
+    -ArgumentList "run","dev","--","--host","0.0.0.0","--port","$FrontendPort","--strictPort" `
     -WorkingDirectory $Frontend `
     -RedirectStandardOutput (Join-Path $LogDir "frontend.log") `
     -RedirectStandardError  (Join-Path $LogDir "frontend.err.log") `

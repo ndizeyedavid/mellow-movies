@@ -3,7 +3,15 @@
  * All endpoints return ready-to-render shapes produced by the backend.
  */
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
+// Talk to the backend on the same host that served the frontend.
+// When another device loads the app via http://<PC-IP>:5173 this resolves
+// to http://<PC-IP>:8000 automatically (hardcoding "localhost" would point
+// the phone at itself). VITE_API_BASE still wins if you set it.
+const API_BASE =
+  import.meta.env.VITE_API_BASE ??
+  (typeof window !== "undefined"
+    ? `http://${window.location.hostname}:8000`
+    : "http://localhost:8000");
 
 /* ---------- Response cache ----------
  * Three layers, cheapest first:
