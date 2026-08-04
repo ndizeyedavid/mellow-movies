@@ -192,10 +192,11 @@ Here's the saga, because this repo earned it:
    - **Fly.io** — sounded promising, then broke our heart with a bill ("not free" it said, with tears in its eyes).
    - **PythonAnywhere** — "looks promising", we said. Then discovered the free plan **whitelists outbound hosts** and `moviebox.ph` / `aoneroom.com` were not invited to that party. The API couldn't even talk to the plug it was supposed to wrap.
    - **Every free tier** we auditioned either geo-blocked us, whitelisted us out of existence, or demanded a credit card like it was a nightclub.
-6. **Current status:** **fully local, forever.** No more chasing servers. The repo now ships `dev.bat` + `scripts/` — one double-click boots the backend and frontend on your own machine, where your residential IP is _exactly_ the IP the upstream API loves.
-7. **Lesson learned:** the internet is a series of middlemen blocking each other's middlemen. The only IP that was never blocked was the one in your own house.
+6. **We got outsmarted by it, then outsmarted it back.** The backend now **forwards the caller's residential IP** to the upstream via `X-Forwarded-For` + `X-Real-IP` on every request — but especially on the stream `play` call. The upstream trusted it. `hasResource` flipped to `true` from an AWS host. **We are, once again, hostable.**
+7. **Current status:** **hybrid.** Run it at home with `dev.bat + scripts/` (one double-click, works offline, zero drama) **or** host it — Render/Fly/whoever will finally give you a working stream as long as the _caller_ is on a residential IP. Best of both worlds.
+8. **Lesson learned:** the internet is a series of middlemen blocking each other's middlemen. But sometimes the blocker believes the middleman's forwarding headers. When it does, you win.
 
-> **Moral of the story:** Deploying is easy. Deploying somewhere the upstream doesn't hate you is a full-time job. Running it at home? Free. Forever. No shame.
+> **Moral of the story:** Deploying is easy. Deploying somewhere the upstream doesn't hate you is a full-time job — until you convince the upstream you're not who you are. Then it's a five-minute job.
 
 ---
 
@@ -213,11 +214,11 @@ A: Because the user is the database. Zero server costs. Peak efficiency. Don't t
 **Q: Why is the entire backend one file?**
 A: Because `api.py` is 560 lines of pure, unfiltered confidence. Refactoring is for people with time.
 
-**Q: Why did the streams break in production but not locally?**
-A: Read the "Great Deployment War" section above and pour one out for us. Then run `dev.bat` and enjoy them locally, guilt-free.
+**Q: How did you get streams working in production?**
+A: The backend forwards the caller's residential IP upstream via `X-Forwarded-For`/`X-Real-IP`. The upstream believed it. Weeks of suffering, undone by two headers. See the war section above; there's a moral in there somewhere.
 
-**Q: Why is everything local now?**
-A: The upstream API loves residential IPs and despises datacenter IPs. Your house has a residential IP. Case closed. The servers have been retired to the Server of Shame, where they can no longer hurt anyone.
+**Q: Local or hosted — which should I use?**
+A: Both work now. For a quick, private, no-config setup: `dev.bat`. For sharing/always-on: host the backend, make sure your callers are on residential IPs (most people are), and let the forwarding do the heavy lifting.
 
 **Q: Will this run on my toaster?**
 A: The frontend, maybe. The backend, no. The toaster has standards.

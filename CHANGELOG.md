@@ -2,6 +2,18 @@
 
 All notable changes to Mellow Movies, in the order they broke our hearts.
 
+## [3.1.0] - 2026-08-02
+
+### The "We Outsmarted the Geo-Lock" Release
+
+The Great Deployment War is over. **It worked.**
+
+- **IP-forwarding geo-lock bypass.** The backend now forwards the caller's true residential IP to the upstream via `X-Forwarded-For` + `X-Real-IP` on every upstream call — catalog, search, detail, captions, and especially the stream `play` request.
+- **Hosted mode is back on the table.** Deploy the backend anywhere (Render, Fly, etc.) and streams get a working `hasResource: true` as long as the caller is on a residential IP. Weeks of blocked streams, undone by two headers.
+- **New helpers:** `_client_ip(request)` (first forwarded hop → `X-Real-IP` → socket peer) and `_geo_headers(ip)`.
+- **README updated** — the war section now has a happy ending and the FAQ explains the magic.
+- **Hybrid setup:** run locally via `dev.bat` (offline, zero config) or host it. Best of both worlds.
+
 ## [3.0.0] - 2026-08-02
 
 ### The "Fully Local, Forever" Release
