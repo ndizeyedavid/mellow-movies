@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import PageHero from "./PageHero";
+import HeroCarousel from "./HeroCarousel";
 import MediaGrid from "./MediaGrid";
 import { FaAngleDown } from "react-icons/fa6";
 import { fetchCatalog } from "../../api/client";
@@ -87,11 +88,39 @@ export default function MediaCatalog({
     }
   }, [snap, page, sort, genre]);
 
+  // First five fetched titles back the hero carousel (in the catalog's
+  // recommended order); the grid below skips them so nothing repeats.
+  const heroItems = useMemo(() => {
+    if (snap.page !== page || snap.genre !== genre) return [];
+    return snap.items.slice(0, 5);
+  }, [snap, page, genre]);
+
+  const gridItems = useMemo(() => {
+    if (heroItems.length === 0 || sorted.length <= heroItems.length)
+      return sorted;
+    const heroIds = new Set(heroItems.map((i) => i.id));
+    return sorted.filter((i) => !heroIds.has(i.id));
+  }, [sorted, heroItems]);
+
   const totalPages = Math.max(1, Math.ceil(total / perPage));
 
   return (
     <>
-      <PageHero kicker={kicker} title={title} description={description} />
+      {/* <PageHero kicker={kicker} title={title} description={description} /> */}
+
+      {/* Featured carousel — prev/next arrows, autoplay, segmented dots */}
+      <section className="pt-8 2xl:pt-12">
+        <div className="section-gutter mx-auto w-full max-w-[1920px]">
+          {loading ? (
+            <div
+              aria-hidden="true"
+              className="h-[420px] w-full animate-pulse rounded-2xl bg-card2 sm:h-[480px] lg:h-[540px] 2xl:h-[560px]"
+            />
+          ) : heroItems.length > 0 ? (
+            <HeroCarousel items={heroItems} />
+          ) : null}
+        </div>
+      </section>
 
       <section className="flex flex-col gap-10 py-14 2xl:py-20">
         <div className="section-gutter mx-auto flex w-full max-w-[1920px] flex-col gap-10">
@@ -179,7 +208,7 @@ export default function MediaCatalog({
               ))}
             </div>
           ) : (
-            <MediaGrid items={sorted} />
+            <MediaGrid items={gridItems} />
           )}
 
           {/* Pagination */}
