@@ -20,15 +20,16 @@ export default function PrivacyPage() {
           body: (
             <>
               <p>
-                1.1 Information you give us: your email address, your password
-                (encrypted — we're not animals), and anything you type into
-                forms or send to our support team.
+                1.1 Information you give us: very little, because there is no
+                signup. If you email our support team, we see your email address
+                and whatever you wrote. If you donate, we see the details your
+                payment provider sends us. That's about it.
               </p>
               <p>
-                1.2 Information we collect automatically: your watch history
-                (so we can recommend things), device type, browser,
-                approximate location, and your IP address. About that IP
-                address — see Section 3. It's a doozy.
+                1.2 Information we collect automatically: your watch history (so
+                we can recommend things), device type, browser, approximate
+                location, and your IP address. About that IP address — see
+                Section 3. It's a doozy.
               </p>
               <p>
                 1.3 Information from cookies and similar technologies. Cookies
@@ -43,10 +44,10 @@ export default function PrivacyPage() {
           body: (
             <p>
               We use your information to: provide and improve the Service;
-              personalise recommendations; respond to support requests; keep
-              the Service secure; and send you the occasional update. We do
-              not sell your information, because (a) we believe in privacy,
-              and (b) nobody has offered us enough money yet.
+              personalise recommendations; respond to support requests; keep the
+              Service secure; and send you the occasional update. We do not sell
+              your information, because (a) we believe in privacy, and (b)
+              nobody has offered us enough money yet.
             </p>
           ),
         },
@@ -54,15 +55,15 @@ export default function PrivacyPage() {
           heading: "3. The IP Address Thing",
           body: (
             <p>
-              Here is the honest part, because you're clearly the curious
-              type. When you request streaming data, our servers take your IP
-              address and attach it to the request we send upstream. Why?
-              Because some streaming sources think they can tell where a
-              server lives and block it accordingly. We outsmarted them. Your
-              IP is used strictly to route the request on your behalf — it is
-              not stored beyond what is needed to deliver your movie, and it
-              is not used to build a dossier on you. We could have buried this
-              in legalese. We chose honesty and a little bragging instead.
+              Here is the honest part, because you're clearly the curious type.
+              When you request streaming data, our servers take your IP address
+              and attach it to the request we send upstream. Why? Because some
+              streaming sources think they can tell where a server lives and
+              block it accordingly. We outsmarted them. Your IP is used strictly
+              to route the request on your behalf — it is not stored beyond what
+              is needed to deliver your movie, and it is not used to build a
+              dossier on you. We could have buried this in legalese. We chose
+              honesty and a little bragging instead.
             </p>
           ),
         },
@@ -71,10 +72,10 @@ export default function PrivacyPage() {
           body: (
             <p>
               We use cookies to keep you logged in, remember your preferences,
-              and generally make the Service feel less like a stranger's
-              house. You can disable cookies in your browser, but some parts
-              of the Service may stop working properly, and we will be mildly
-              sad about it.
+              and generally make the Service feel less like a stranger's house.
+              You can disable cookies in your browser, but some parts of the
+              Service may stop working properly, and we will be mildly sad about
+              it.
             </p>
           ),
         },
@@ -82,12 +83,12 @@ export default function PrivacyPage() {
           heading: "5. Third Parties",
           body: (
             <p>
-              We use third-party services to host the Service, deliver
-              Content, and handle payments (should you ever donate). Those
-              providers process data only to the extent needed to provide
-              their services and are bound by their own privacy policies. We
-              try to keep the number of people who touch your data small. It
-              is a small, trusted club.
+              We use third-party services to host the Service, deliver Content,
+              and handle payments (should you ever donate). Those providers
+              process data only to the extent needed to provide their services
+              and are bound by their own privacy policies. We try to keep the
+              number of people who touch your data small. It is a small, trusted
+              club.
             </p>
           ),
         },
@@ -95,11 +96,11 @@ export default function PrivacyPage() {
           heading: "6. Data Retention",
           body: (
             <p>
-              We keep your data for as long as your account is active, or as
-              long as reasonably needed to provide the Service and comply with
-              legal obligations. If you delete your account, we delete your
-              data in a timely manner, and we mean it — the delete button
-              works. We're not one of those companies.
+              Since there are no accounts, there is no account data to retain.
+              Any logs we keep are limited to what is needed to run the Service
+              and comply with legal obligations, and we don't hang onto them
+              longer than we have to. Want your watchlist gone? Clear your
+              browser data. We're not one of those companies.
             </p>
           ),
         },
@@ -107,12 +108,12 @@ export default function PrivacyPage() {
           heading: "7. Your Rights and Choices",
           body: (
             <p>
-              You have the right to: access the personal data we hold about
-              you; correct inaccurate data; request deletion; and object to
-              certain processing. Want something gone? Use our Request Removal
-              page, or email privacy@mellowmovies.com. We respond to privacy
-              requests faster than we respond to most other mail, because we
-              respect you, and also because the lawyers told us to.
+              You have the right to: access the personal data we hold about you;
+              correct inaccurate data; request deletion; and object to certain
+              processing. Want something gone? Use our Request Removal page, or
+              email privacy@mellowmovies.com. We respond to privacy requests
+              faster than we respond to most other mail, because we respect you,
+              and also because the lawyers told us to.
             </p>
           ),
         },
@@ -121,9 +122,9 @@ export default function PrivacyPage() {
           body: (
             <p>
               The Service is not directed at children under 13, and we do not
-              knowingly collect personal information from them. If you believe
-              a child under 13 has provided us with personal information,
-              contact us, and we will delete it and have a stern word with the
+              knowingly collect personal information from them. If you believe a
+              child under 13 has provided us with personal information, contact
+              us, and we will delete it and have a stern word with the
               responsible adult.
             </p>
           ),
@@ -133,8 +134,8 @@ export default function PrivacyPage() {
           body: (
             <p>
               We use industry-standard safeguards to protect your data,
-              including encryption in transit and at rest where appropriate.
-              No system is perfectly secure — anyone who promises you that is
+              including encryption in transit and at rest where appropriate. No
+              system is perfectly secure — anyone who promises you that is
               selling something — but we take reasonable measures and update
               them as threats evolve.
             </p>
@@ -144,10 +145,10 @@ export default function PrivacyPage() {
           heading: "10. Changes to This Policy",
           body: (
             <p>
-              We may update this Privacy Policy from time to time. Changes
-              take effect when posted, and the "Last updated" date above tells
-              you how fresh this document is. Your continued use of the
-              Service after changes means you accept the updated policy.
+              We may update this Privacy Policy from time to time. Changes take
+              effect when posted, and the "Last updated" date above tells you
+              how fresh this document is. Your continued use of the Service
+              after changes means you accept the updated policy.
             </p>
           ),
         },
@@ -155,8 +156,8 @@ export default function PrivacyPage() {
           heading: "11. Contact",
           body: (
             <p>
-              Questions about privacy? Email privacy@mellowmovies.com. Or
-              read the policy again. Or both. We're not picky.
+              Questions about privacy? Email privacy@mellowmovies.com. Or read
+              the policy again. Or both. We're not picky.
             </p>
           ),
         },

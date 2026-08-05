@@ -74,34 +74,44 @@ export interface Faq {
 
 export const faqs: Faq[] = [
   {
-    question: "How many screens can I watch Mellow Movies on at once?",
+    question: "Do I need an account to watch?",
     answer:
-      "Every subscription includes unlimited screens. Watch on any device — smart TV, laptop, tablet or phone — at the same time, wherever you are.",
+      "Nope. Mellow Movies has no signup, no login, and no password to forget. Open the page, press play, enjoy. Your watchlist lives in your browser and nowhere else.",
+  },
+  {
+    question: "Is Mellow Movies really free?",
+    answer:
+      "Yes, really. There are no subscriptions and no paywalls. If the app has brought you joy, there's a donation button — but it's fully optional, and we won't beg. Much.",
+  },
+  {
+    question: "Why won't a title play, or why does it keep buffering?",
+    answer:
+      "Streaming depends on your connection and on the source feeding us the content. If a title won't start, try refreshing the page, switching to a more stable network, or checking back a little later.",
   },
   {
     question: "Can I download movies and shows to watch offline?",
     answer:
-      "Yes. All premium plans let you download titles to your device so you can keep watching even without an internet connection.",
+      "No. Mellow Movies streams — there's no download button and no offline mode. You'll need an internet connection to watch, so make peace with that Wi-Fi bill.",
   },
   {
-    question: "What content is available on Mellow Movies?",
+    question: "What can I watch Mellow Movies on?",
     answer:
-      "We offer thousands of blockbuster movies, classic films and popular TV shows, including Mellow Movies Originals produced exclusively for our platform.",
+      "Anything with a modern browser: PC, laptop, phone, tablet, or smart TV. If it can open a web page, it can probably stream.",
   },
   {
-    question: "Is there a free trial available?",
+    question: "How does the streaming quality work?",
     answer:
-      "Yes — every new member gets a free trial period on any plan. Cancel anytime before the trial ends and you will not be charged.",
+      "Quality adapts automatically to your connection — crisp HD when you can, higher when your bandwidth behaves, and a gentle slide into potato quality when your Wi-Fi gives up.",
   },
   {
-    question: "Can I change or cancel my subscription anytime?",
+    question: "Why did a title disappear from the catalog?",
     answer:
-      "Absolutely. Upgrade, downgrade or cancel your plan at any moment from your account settings. No hidden fees, no long-term contracts.",
+      "Content rotates. Sources change, rights change, and occasionally a title just decides to leave. If something vanishes, it usually comes back — or something better takes its place.",
   },
   {
-    question: "How does the HD and 4K streaming quality work?",
+    question: "Is Mellow Movies legal?",
     answer:
-      "Standard plans stream in HD, while Premium unlocks 4K Ultra HD with HDR on supported devices — automatically adjusted to your connection speed.",
+      "We take copyright seriously and honor removal requests through our Request Removal page. If you own something we're showing and want it gone, tell us and we'll take it down. We're not trying to get sued, thanks.",
   },
 ];
 

@@ -114,10 +114,10 @@ export default function RemovalPage() {
           heading: "6. Repeat Infringers",
           body: (
             <p>
-              We take removal requests seriously. Accounts or sources
-              responsible for repeated infringement may be cut off, because
-              even we have standards, and also because getting sued is not on
-              the vision board.
+              We take removal requests seriously. Sources responsible for
+              repeated infringement may be cut off, because even we have
+              standards, and also because getting sued is not on the vision
+              board.
             </p>
           ),
         },

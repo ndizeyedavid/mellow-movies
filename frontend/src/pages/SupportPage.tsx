@@ -1,8 +1,5 @@
 import { useState, type FormEvent } from "react";
 import {
-  FaEnvelope,
-  FaPhone,
-  FaLocationDot,
   FaFacebook,
   FaInstagram,
   FaXTwitter,
@@ -13,27 +10,6 @@ import FaqSection from "../components/sections/FaqSection";
 import Button from "../components/ui/Button";
 import { usePageTitle } from "../hooks/usePageTitle";
 
-const contactCards = [
-  {
-    id: "email",
-    title: "Email Us",
-    lines: ["info@mellowmovies.com", "support@mellowmovies.com"],
-    icon: <FaEnvelope className="h-7 w-7" />,
-  },
-  {
-    id: "phone",
-    title: "Call Us",
-    lines: ["+1 (234) 567-890", "+1 (987) 654-321"],
-    icon: <FaPhone className="h-7 w-7" />,
-  },
-  {
-    id: "location",
-    title: "Visit Us",
-    lines: ["88 Alperton Street", "Johannesburg, South Africa"],
-    icon: <FaLocationDot className="h-7 w-7" />,
-  },
-];
-
 const socials = [
   { label: "Facebook", icon: <FaFacebook className="h-5 w-5" /> },
   { label: "Instagram", icon: <FaInstagram className="h-5 w-5" /> },
@@ -43,7 +19,7 @@ const socials = [
 
 /**
  * Support page (Figma "Support Page - Desktop" #107:323):
- * contact info cards, FAQ section, and a contact form with socials.
+ * FAQ section and a contact form with socials.
  */
 export default function SupportPage() {
   usePageTitle("Support");
@@ -64,30 +40,6 @@ export default function SupportPage() {
       />
 
       <section className="section-stack py-14 2xl:py-24">
-        {/* Contact info cards */}
-        <div className="section-gutter mx-auto grid w-full max-w-[1920px] gap-[30px] sm:grid-cols-3">
-          {contactCards.map((card) => (
-            <div
-              key={card.id}
-              className="flex flex-col gap-6 rounded-xl border border-line bg-card p-6 transition-colors duration-300 hover:border-line2 sm:p-[30px]"
-            >
-              <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-card2 bg-background text-white">
-                {card.icon}
-              </div>
-              <h2 className="text-xl font-semibold text-white lg:text-2xl">
-                {card.title}
-              </h2>
-              <ul className="flex flex-col gap-2">
-                {card.lines.map((line) => (
-                  <li key={line} className="text-base text-muted lg:text-lg">
-                    {line}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-
         {/* FAQ */}
         <FaqSection />
 

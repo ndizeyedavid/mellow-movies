@@ -32,25 +32,27 @@ export default function TermsPage() {
           ),
         },
         {
-          heading: "2. The Account",
+          heading: "2. No Account, No Password, No Drama",
           body: (
             <>
               <p>
-                2.1 You need an account to use the Service. One account per
-                human. If you are reading this and suspect your cousin is also
-                using your account, you are probably correct, and we are
-                probably judging you both.
+                2.1 The Service requires no signup, no login, and no password
+                manager. You open the page, you press play, you watch. That's
+                the entire registration process. We couldn't log you in even
+                if you asked — there's no door, so there's no key.
               </p>
               <p>
-                2.2 You are responsible for keeping your password secret. We
-                cannot help you if you chose "password123" and are now
-                surprised by the outcome. We can, however, point and laugh.
+                2.2 Your watchlist and preferences live in your browser, on
+                your device, and nowhere else. Clear your browser data and
+                they vanish like a plot twist you should have seen coming.
+                This also means there is no account for anyone else to hijack,
+                share, or judge you about. Your cousin is safe.
               </p>
               <p>
                 2.3 You must be at least the age of digital consent in your
-                jurisdiction to create an account. Children watching with
-                their parents' permission are welcome; children billing their
-                parents' credit cards are not.
+                jurisdiction to use the Service. Children watching with their
+                parents' permission are welcome; children racking up parental
+                guilt trips are not.
               </p>
             </>
           ),
