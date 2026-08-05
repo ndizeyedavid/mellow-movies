@@ -39,15 +39,15 @@ export default function CtaSection() {
         <div className="relative flex flex-col items-start gap-10 px-6 py-12 sm:px-10 md:flex-row md:items-center md:justify-between lg:py-14 xl:gap-[60px] 2xl:gap-[72px] 2xl:px-[64px] 2xl:py-[72px]">
           <div className="flex max-w-xl flex-col gap-3.5">
             <h2 className="text-3xl font-bold leading-snug text-white md:text-4xl xl:text-[40px] 2xl:text-[40px]">
-              Start your free trial today!
+              Enjoy unlimited streaming for free!
             </h2>
             <p className="text-base leading-snug text-muted lg:text-lg">
-              This is a clear and concise call to action that encourages users
-              to sign up for a free trial of Mellow Movies.
+              Dive into endless entertainment with Mellow Movies. Watch your
+              favorite films and shows anytime, anywhere, completely free.
             </p>
           </div>
-          <Link to="/pricing">
-            <Button size="lg">Start a Free Trial</Button>
+          <Link to="/browse">
+            <Button size="lg">Start Watching</Button>
           </Link>
         </div>
       </div>

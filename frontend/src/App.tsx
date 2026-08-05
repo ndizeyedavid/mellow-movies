@@ -14,6 +14,9 @@ const BrowsePage = lazy(() => import("./pages/BrowsePage"));
 const MoviesPage = lazy(() => import("./pages/MoviesPage"));
 const ShowsPage = lazy(() => import("./pages/ShowsPage"));
 const SupportPage = lazy(() => import("./pages/SupportPage"));
+const TermsPage = lazy(() => import("./pages/TermsPage"));
+const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
+const RemovalPage = lazy(() => import("./pages/RemovalPage"));
 const SubscriptionPage = lazy(() => import("./pages/SubscriptionPage"));
 const TitleDetailPage = lazy(() => import("./pages/TitleDetailPage"));
 const WatchPage = lazy(() => import("./pages/WatchPage"));
@@ -82,6 +85,30 @@ const router = createBrowserRouter([
         element: (
           <Suspense fallback={<PageFallback />}>
             <SupportPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: "terms",
+        element: (
+          <Suspense fallback={<PageFallback />}>
+            <TermsPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: "privacy",
+        element: (
+          <Suspense fallback={<PageFallback />}>
+            <PrivacyPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: "removal",
+        element: (
+          <Suspense fallback={<PageFallback />}>
+            <RemovalPage />
           </Suspense>
         ),
       },

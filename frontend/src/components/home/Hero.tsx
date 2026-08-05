@@ -1,6 +1,7 @@
 import Button from "../ui/Button";
 import heroBg from "../../assets/hero-bg.png";
 import playIcon from "../../assets/icon-play.svg";
+import { Link } from "react-router-dom";
 
 /**
  * Hero section from Figma (#90:206 + #90:146): full-bleed background
@@ -46,12 +47,14 @@ export default function Hero() {
               TV shows — and build your own watchlist in seconds.
             </p>
           </div>
-          <Button
-            size="lg"
-            icon={<img src={playIcon} alt="" className="h-7 w-7" />}
-          >
-            Start Watching Now
-          </Button>
+          <Link to={"/movies"}>
+            <Button
+              size="lg"
+              icon={<img src={playIcon} alt="" className="h-7 w-7" />}
+            >
+              Start Watching Now
+            </Button>
+          </Link>
         </div>
       </div>
     </section>

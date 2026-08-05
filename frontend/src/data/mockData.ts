@@ -205,26 +205,43 @@ export const devices: Device[] = [
   },
 ];
 
+export interface FooterLink {
+  label: string;
+  /** Optional in-app route; decorative links omit it. */
+  to?: string;
+}
+
 export interface FooterColumn {
   title: string;
-  links: string[];
+  links: FooterLink[];
 }
 
 export const footerColumns: FooterColumn[] = [
-  { title: "Home", links: ["Categories", "Devices", "Pricing", "FAQ"] },
+  {
+    title: "Home",
+    links: [{ label: "Categories" }, { label: "Devices" }, { label: "FAQ" }],
+  },
   {
     title: "Movies & Shows",
-    links: ["All Movies", "All Shows", "New Releases", "Trending"],
+    links: [
+      { label: "All Movies" },
+      { label: "All Shows" },
+      { label: "New Releases" },
+      { label: "Trending" },
+    ],
   },
   {
     title: "Support",
     links: [
-      "Help Center",
-      "Contact Us",
-      "Terms of Use",
-      "Privacy Policy",
-      "Legal",
+      { label: "Help Center", to: "/support" },
+      { label: "Contact Us", to: "/support" },
+      { label: "Terms of Use", to: "/terms" },
+      { label: "Privacy Policy", to: "/privacy" },
+      { label: "Legal", to: "/removal" },
     ],
   },
-  { title: "Subscription", links: ["Plans", "Features", "Free Trial"] },
+  {
+    title: "Subscription",
+    links: [{ label: "Features" }, { label: "Donate (If you want)" }],
+  },
 ];

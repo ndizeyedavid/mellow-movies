@@ -9,10 +9,7 @@ import { footerColumns } from "../../data/mockData";
 import logoMark from "../../assets/logo-mark.svg";
 
 const socials = [
-  { label: "Facebook", icon: <FaFacebook className="h-5 w-5" /> },
   { label: "Instagram", icon: <FaInstagram className="h-5 w-5" /> },
-  { label: "X (Twitter)", icon: <FaXTwitter className="h-5 w-5" /> },
-  { label: "YouTube", icon: <FaYoutube className="h-5 w-5" /> },
 ];
 
 /**
@@ -32,13 +29,22 @@ export default function Footer() {
               </h3>
               <ul className="flex flex-col gap-4">
                 {col.links.map((link) => (
-                  <li key={link}>
-                    <a
-                      href="#"
-                      className="text-base text-muted transition-colors duration-200 hover:text-white lg:text-lg"
-                    >
-                      {link}
-                    </a>
+                  <li key={link.label}>
+                    {link.to ? (
+                      <Link
+                        to={link.to}
+                        className="text-base text-muted transition-colors duration-200 hover:text-white lg:text-lg"
+                      >
+                        {link.label}
+                      </Link>
+                    ) : (
+                      <a
+                        href="#"
+                        className="text-base text-muted transition-colors duration-200 hover:text-white lg:text-lg"
+                      >
+                        {link.label}
+                      </a>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -48,7 +54,7 @@ export default function Footer() {
           {/* Connect column */}
           <div className="flex flex-col gap-6">
             <h3 className="text-lg font-semibold text-white lg:text-xl">
-              Connect With Us
+              Connect With Moi
             </h3>
             <div className="flex gap-3">
               {socials.map((s) => (
@@ -68,26 +74,27 @@ export default function Footer() {
         {/* Bottom bar */}
         <div className="flex flex-col items-center justify-between gap-6 border-t border-line pt-6 md:flex-row">
           <p className="text-center text-base text-muted lg:text-lg">
-            © 2024 Mellow Movies, Inc. All rights reserved.
+            © {new Date().getFullYear()} Mellow Movies, Inc. All rights
+            reserved.
           </p>
           <div className="flex items-center gap-6">
             <Link
-              to="/support"
+              to="/terms"
               className="text-base text-muted transition-colors duration-200 hover:text-white lg:text-lg"
             >
               Terms of Use
             </Link>
             <Link
-              to="/support"
+              to="/privacy"
               className="text-base text-muted transition-colors duration-200 hover:text-white lg:text-lg"
             >
               Privacy Policy
             </Link>
             <Link
-              to="/support"
+              to="/removal"
               className="text-base text-muted transition-colors duration-200 hover:text-white lg:text-lg"
             >
-              Cookies
+              Request Removal🥺
             </Link>
           </div>
           <div className="flex items-center gap-2">
