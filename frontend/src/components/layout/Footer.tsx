@@ -1,10 +1,5 @@
 import { Link } from "react-router-dom";
-import {
-  FaFacebook,
-  FaInstagram,
-  FaXTwitter,
-  FaYoutube,
-} from "react-icons/fa6";
+import { FaInstagram } from "react-icons/fa6";
 import { footerColumns } from "../../data/mockData";
 import logoMark from "../../assets/logo-mark.svg";
 

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import PageHero from "./PageHero";
 import HeroCarousel from "./HeroCarousel";
 import MediaGrid from "./MediaGrid";
 import { FaAngleDown } from "react-icons/fa6";
@@ -7,6 +6,7 @@ import { fetchCatalog } from "../../api/client";
 import { mapApiItems } from "../../api/media";
 import type { MediaItem } from "../../data/mockData";
 import { categories } from "../../data/mockData";
+import PageHero from "./PageHero";
 
 export type SortKey = "popular" | "rating" | "year" | "az";
 
@@ -106,7 +106,9 @@ export default function MediaCatalog({
 
   return (
     <>
-      {/* <PageHero kicker={kicker} title={title} description={description} /> */}
+      <div className="hidden">
+        <PageHero kicker={kicker} title={title} description={description} />
+      </div>
 
       {/* Featured carousel — prev/next arrows, autoplay, segmented dots */}
       <section className="pt-8 2xl:pt-12">

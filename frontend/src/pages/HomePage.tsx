@@ -3,9 +3,6 @@ import ContinueWatchingRail from "../components/home/ContinueWatchingRail";
 import MyListRail from "../components/home/MyListRail";
 import TopTenRail from "../components/home/TopTenRail";
 import TrendingSection from "../components/home/TrendingSection";
-import DevicesSection from "../components/sections/DevicesSection";
-import FaqSection from "../components/sections/FaqSection";
-import PricingSection from "../components/sections/PricingSection";
 import CtaSection from "../components/sections/CtaSection";
 import { usePageTitle } from "../hooks/usePageTitle";
 
