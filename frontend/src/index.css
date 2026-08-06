@@ -1,4 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap");
 @import "tailwindcss";
 
 @theme {
@@ -40,6 +39,14 @@ html {
   .section-stack {
     gap: 4rem;
   }
+}
+
+/* Offscreen sections skip render/relayout until scrolled toward them — a
+   big win on long pages (home) and slow phones. contain-intrinsic-size
+   reserves vertical space so scroll position never jumps. */
+.section-stack > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 340px;
 }
 
 /* Horizontal page gutters — matches Figma: 20px mobile → 100px laptop →

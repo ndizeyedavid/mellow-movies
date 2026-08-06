@@ -6,8 +6,6 @@ import {
   FaPlus,
   FaCheck,
   FaThumbsUp,
-  FaVolumeHigh,
-  FaVolumeXmark,
 } from "react-icons/fa6";
 import type { MediaItem } from "../../data/mockData";
 import playIcon from "../../assets/icon-play.svg";
@@ -18,7 +16,7 @@ interface HeroCarouselProps {
 }
 
 const glassBtn =
-  "flex h-11 w-11 items-center justify-center rounded-lg border border-white/15 bg-black/50 text-white backdrop-blur-md transition-colors duration-200 hover:border-white/30 hover:bg-black/70 sm:h-12 sm:w-12";
+  "flex h-10 w-10 items-center justify-center rounded-lg border border-white/15 bg-black/50 text-white backdrop-blur-md transition-colors duration-200 hover:border-white/30 hover:bg-black/70 sm:h-12 sm:w-12";
 
 /**
  * MovieBox-style hero carousel banner:
@@ -34,7 +32,6 @@ export default memo(function HeroCarousel({
   const [paused, setPaused] = useState(false);
   const [added, setAdded] = useState(false);
   const [liked, setLiked] = useState(false);
-  const [muted, setMuted] = useState(false);
   const navigate = useNavigate();
 
   const count = items.length;
@@ -78,6 +75,7 @@ export default memo(function HeroCarousel({
             src={item.poster}
             alt={i === index ? item.title : ""}
             loading={i === index ? "eager" : "lazy"}
+            fetchPriority={i === index ? "high" : "low"}
             decoding="async"
             aria-hidden={i !== index}
             className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${
@@ -122,27 +120,27 @@ export default memo(function HeroCarousel({
       </button>
 
       {/* Lower-third content, centered */}
-      <div className="absolute inset-x-0 bottom-0 flex flex-col items-center px-6 pb-8 text-center sm:pb-10">
-        <span className="text-sm font-semibold uppercase tracking-[0.2em] text-primary">
+      <div className="absolute inset-x-0 bottom-0 flex flex-col items-center px-4 pb-6 text-center sm:px-6 sm:pb-10">
+        <span className="text-xs font-semibold uppercase tracking-[0.2em] text-primary sm:text-sm">
           {current.type === "show" ? "TV Series" : "Movie"}
         </span>
-        <h2 className="mt-2 text-3xl font-extrabold leading-tight text-white sm:text-4xl lg:text-5xl">
+        <h2 className="mt-1.5 line-clamp-2 text-2xl font-extrabold leading-tight text-white sm:mt-2 sm:text-4xl lg:text-5xl">
           {current.title}
         </h2>
-        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-soft sm:text-base">
+        <p className="mt-2 line-clamp-2 max-w-2xl text-xs leading-relaxed text-soft sm:mt-3 sm:text-base sm:line-clamp-3">
           {current.description ??
             `Watch ${current.title} now — one of the most loved ${
               current.type === "show" ? "series" : "movies"
             } on Mellow Movies.`}
         </p>
 
-        {/* Action bar */}
-        <div className="mt-5 flex items-center gap-3">
+        {/* Action bar — wraps on narrow phones so Play Now never clips */}
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5 sm:mt-5 sm:gap-3">
           <button
             onClick={() => navigate(`/watch/${current.id}`)}
-            className="flex items-center gap-2 rounded-lg bg-primary px-6 py-3 text-base font-semibold text-white transition-colors duration-200 hover:bg-primary-dark active:scale-[0.98] sm:px-7"
+            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white transition-colors duration-200 hover:bg-primary-dark active:scale-[0.98] sm:px-7 sm:py-3 sm:text-base"
           >
-            <img src={playIcon} alt="" className="h-5 w-5" />
+            <img src={playIcon} alt="" className="h-4 w-4 sm:h-5 sm:w-5" />
             Play Now
           </button>
           <button
@@ -163,21 +161,10 @@ export default memo(function HeroCarousel({
           >
             <FaThumbsUp className={`h-5 w-5 ${liked ? "text-primary" : ""}`} />
           </button>
-          <button
-            onClick={() => setMuted((v) => !v)}
-            aria-label={muted ? "Unmute" : "Mute"}
-            className={glassBtn}
-          >
-            {muted ? (
-              <FaVolumeXmark className="h-5 w-5" />
-            ) : (
-              <FaVolumeHigh className="h-5 w-5" />
-            )}
-          </button>
         </div>
 
         {/* Pagination segment bars */}
-        <div className="mt-6 flex items-center gap-2">
+        <div className="mt-4 flex items-center gap-2 sm:mt-6">
           {items.map((item, i) => (
             <button
               key={item.id}
