@@ -330,7 +330,7 @@ function WatchContent({ item }: { item: MediaItem }) {
     item.year,
     isShow
       ? item.seasons
-        ? `${item.seasons} seasons`
+        ? ` - ${item.seasons} seasons`
         : undefined
       : item.duration,
     item.quality,
