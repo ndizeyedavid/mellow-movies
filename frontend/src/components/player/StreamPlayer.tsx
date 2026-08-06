@@ -5,11 +5,13 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
+  type TouchEvent as ReactTouchEvent,
 } from "react";
 import Hls from "hls.js";
 import * as dashjs from "dashjs";
 import { FaPlay, FaRotateRight, FaTriangleExclamation } from "react-icons/fa6";
 import BufferingIndicator from "./BufferingIndicator";
+import SeekIndicator from "./SeekIndicator";
 import PlayerControls, {
   type PlayerAudioTrack,
   type PlayerMenu,
@@ -72,6 +74,17 @@ export default function StreamPlayer({
   // Resume target captured once per mount — the bootstrap effect re-runs on
   // source switches but must not seek again after the first metadata.
   const startAtRef = useRef(startAt);
+
+  // YouTube-style double-tap seek (touch only): remembers the last tap so a
+  // quick second tap can cancel the pending pause and seek ±10s instead.
+  const lastTapRef = useRef<{ time: number; timer: number } | null>(null);
+  // Guards the mouse click/dblclick handlers against touch-synthesized events.
+  const lastTouchAtRef = useRef(0);
+  const flashTimerRef = useRef<number | undefined>(undefined);
+  const [seekFlash, setSeekFlash] = useState<{
+    side: "left" | "right";
+    nonce: number;
+  } | null>(null);
 
   const [srcIndex, setSrcIndex] = useState(0);
   const src = srcs[srcIndex] ?? "";
@@ -349,7 +362,11 @@ export default function StreamPlayer({
   }, [scheduleHide]);
 
   useEffect(() => {
-    return () => window.clearTimeout(hideTimerRef.current);
+    return () => {
+      window.clearTimeout(hideTimerRef.current);
+      window.clearTimeout(flashTimerRef.current);
+      if (lastTapRef.current) window.clearTimeout(lastTapRef.current.timer);
+    };
   }, []);
 
   /* ---------- Actions ---------- */
@@ -364,6 +381,58 @@ export default function StreamPlayer({
     const v = videoRef.current;
     if (!v) return;
     v.currentTime = Math.min(Math.max(t, 0), v.duration || 0);
+  };
+
+  /** Nudge the playhead by `delta` seconds and flash the side feedback. */
+  const seekBy = useCallback(
+    (delta: number, side: "left" | "right") => {
+      const v = videoRef.current;
+      if (!v) return;
+      v.currentTime = Math.min(
+        Math.max(v.currentTime + delta, 0),
+        v.duration || 0,
+      );
+      showControls();
+      window.clearTimeout(flashTimerRef.current);
+      setSeekFlash((prev) => ({ side, nonce: (prev?.nonce ?? 0) + 1 }));
+      flashTimerRef.current = window.setTimeout(() => setSeekFlash(null), 550);
+    },
+    [showControls],
+  );
+
+  /** Drop a pending single-tap pause (used when the user hits a control
+   *  instead of a follow-up tap, so the two actions don't fight). */
+  const clearPendingTap = useCallback(() => {
+    if (lastTapRef.current) {
+      window.clearTimeout(lastTapRef.current.timer);
+      lastTapRef.current = null;
+    }
+  }, []);
+
+  /** YouTube-style double-tap seek on touch. preventDefault suppresses the
+   *  synthetic click so one tap only ever pauses/plays once; two quick taps
+   *  on the same path cancel the pending pause and seek ±10s toward the
+   *  tapped side instead. Mouse keeps instant click + dblclick fullscreen. */
+  const onVideoTouchEnd = (e: ReactTouchEvent<HTMLVideoElement>) => {
+    if (e.target !== videoRef.current) return;
+    e.preventDefault();
+    lastTouchAtRef.current = Date.now();
+    const rect = containerRef.current?.getBoundingClientRect();
+    const x = e.changedTouches[0]?.clientX;
+    if (!rect || x == null) return;
+    const now = Date.now();
+    const prev = lastTapRef.current;
+    if (prev && now - prev.time < 300) {
+      // Second tap — cancel the pending pause, seek instead.
+      window.clearTimeout(prev.timer);
+      lastTapRef.current = null;
+      const side = x - rect.left < rect.width / 2 ? "left" : "right";
+      seekBy(side === "left" ? -10 : 10, side);
+      return;
+    }
+    // First tap — pause/play after a short window so a second tap wins.
+    const timer = window.setTimeout(() => togglePlay(), 250);
+    lastTapRef.current = { time: now, timer };
   };
 
   const onVolume = (vol: number) => {
@@ -496,8 +565,18 @@ export default function StreamPlayer({
       <video
         ref={videoRef}
         poster={poster}
-        onClick={togglePlay}
-        onDoubleClick={onToggleFullscreen}
+        onClick={(e) => {
+          // Mouse single-click only — touch is handled by onTouchEnd below,
+          // and a dblclick is the fullscreen gesture, so skip extra clicks.
+          if (e.detail > 1) return;
+          if (Date.now() - lastTouchAtRef.current < 500) return;
+          togglePlay();
+        }}
+        onDoubleClick={() => {
+          if (Date.now() - lastTouchAtRef.current < 500) return;
+          onToggleFullscreen();
+        }}
+        onTouchEnd={onVideoTouchEnd}
         onPlay={() => {
           setPaused(false);
           startedRef.current = true;
@@ -545,7 +624,10 @@ export default function StreamPlayer({
           the video, while the circle itself stays interactive. */}
       {paused && !error && (
         <button
-          onClick={togglePlay}
+          onClick={() => {
+            clearPendingTap();
+            togglePlay();
+          }}
           aria-label={`Play ${title}`}
           className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-black/10 transition-colors hover:bg-black/25"
         >
@@ -558,6 +640,15 @@ export default function StreamPlayer({
       {/* Buffering indicator — circular progress with a fake percentage so
           the user always sees something happening while the stream loads. */}
       {waiting && !paused && !error && <BufferingIndicator />}
+
+      {/* Double-tap seek flash feedback */}
+      {seekFlash && (
+        <SeekIndicator
+          key={seekFlash.nonce}
+          side={seekFlash.side}
+          seconds={10}
+        />
+      )}
 
       {/* Error state */}
       {error && (
@@ -597,7 +688,10 @@ export default function StreamPlayer({
         isFullscreen={isFullscreen}
         isPip={isPip}
         menu={menu}
-        onTogglePlay={togglePlay}
+        onTogglePlay={() => {
+          clearPendingTap();
+          togglePlay();
+        }}
         onSeek={onSeek}
         onVolume={onVolume}
         onToggleMute={onToggleMute}

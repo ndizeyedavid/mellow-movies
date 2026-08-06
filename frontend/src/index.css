@@ -99,6 +99,26 @@ body {
   }
 }
 
+/* Player double-tap seek flash (YouTube-style) */
+@keyframes seek-flash {
+  0% {
+    opacity: 0;
+    transform: translateY(-50%) scale(0.6);
+  }
+  18% {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+  }
+  75% {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-50%) scale(1);
+  }
+}
+
 /* Subtle custom scrollbar to match the dark theme */
 ::-webkit-scrollbar {
   width: 10px;
