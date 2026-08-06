@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for the main window",
+  "windows": ["main", "splash"],
+  "permissions": [
+    "core:default",
+    "opener:default",
+    "shell:default",
+    "global-shortcut:default"
+  ]
+}

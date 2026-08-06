@@ -9,7 +9,12 @@ import {
 } from "react";
 import Hls from "hls.js";
 import * as dashjs from "dashjs";
-import { FaPlay, FaRotateRight, FaTriangleExclamation } from "react-icons/fa6";
+import {
+  FaCompress,
+  FaPlay,
+  FaRotateRight,
+  FaTriangleExclamation,
+} from "react-icons/fa6";
 import BufferingIndicator from "./BufferingIndicator";
 import SeekIndicator from "./SeekIndicator";
 import PlayerControls, {
@@ -18,6 +23,7 @@ import PlayerControls, {
   type PlayerSubtitle,
   type QualityLevel,
 } from "./PlayerControls";
+import { isTauri, onMediaKey, toggleMiniPlayer } from "../../desktopBridge";
 
 interface SubtitleTrack {
   lang: string;
@@ -85,6 +91,10 @@ export default function StreamPlayer({
     side: "left" | "right";
     nonce: number;
   } | null>(null);
+
+  // Only the desktop shell exposes the Tauri bridge; the browser build is
+  // a normal web player and never shows the desktop-only affordances.
+  const isDesktop = useMemo(() => isTauri(), []);
 
   const [srcIndex, setSrcIndex] = useState(0);
   const src = srcs[srcIndex] ?? "";
@@ -409,6 +419,15 @@ export default function StreamPlayer({
     }
   }, []);
 
+  // Global media keys (desktop shell only): play/pause + ±10s seek.
+  useEffect(() => {
+    return onMediaKey((action) => {
+      if (action === "playpause") togglePlay();
+      else if (action === "next") seekBy(10, "right");
+      else if (action === "prev") seekBy(-10, "left");
+    });
+  }, [togglePlay, seekBy]);
+
   /** YouTube-style double-tap seek on touch. preventDefault suppresses the
    *  synthetic click so one tap only ever pauses/plays once; two quick taps
    *  on the same path cancel the pending pause and seek ±10s toward the
@@ -648,6 +667,18 @@ export default function StreamPlayer({
           side={seekFlash.side}
           seconds={10}
         />
+      )}
+
+      {/* Desktop shell: snap this window into the always-on-top mini player. */}
+      {isDesktop && controlsVisible && !error && (
+        <button
+          onClick={() => void toggleMiniPlayer()}
+          aria-label="Toggle mini player"
+          title="Mini player"
+          className="absolute right-4 top-4 z-40 flex h-10 w-10 items-center justify-center rounded-full border border-white/25 bg-black/60 text-white backdrop-blur-md transition-colors hover:bg-black/80"
+        >
+          <FaCompress className="h-4 w-4" />
+        </button>
       )}
 
       {/* Error state */}
