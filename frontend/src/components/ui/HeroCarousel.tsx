@@ -6,8 +6,6 @@ import {
   FaPlus,
   FaCheck,
   FaThumbsUp,
-  FaVolumeHigh,
-  FaVolumeXmark,
 } from "react-icons/fa6";
 import type { MediaItem } from "../../data/mockData";
 import playIcon from "../../assets/icon-play.svg";
@@ -34,7 +32,6 @@ export default memo(function HeroCarousel({
   const [paused, setPaused] = useState(false);
   const [added, setAdded] = useState(false);
   const [liked, setLiked] = useState(false);
-  const [muted, setMuted] = useState(false);
   const navigate = useNavigate();
 
   const count = items.length;
@@ -78,6 +75,7 @@ export default memo(function HeroCarousel({
             src={item.poster}
             alt={i === index ? item.title : ""}
             loading={i === index ? "eager" : "lazy"}
+            fetchPriority={i === index ? "high" : "low"}
             decoding="async"
             aria-hidden={i !== index}
             className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ${
