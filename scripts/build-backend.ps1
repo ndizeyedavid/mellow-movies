@@ -7,6 +7,8 @@ $root   = Split-Path $PSScriptRoot -Parent
 $backend  = Join-Path $root "backend"
 $frontend = Join-Path $root "frontend"
 $venvPy   = Join-Path $backend ".venv\Scripts\python.exe"
+# Fall back to the system python when there's no local venv (e.g. CI runners).
+if (-not (Test-Path $venvPy)) { $venvPy = "python" }
 $triple   = "x86_64-pc-windows-msvc"
 # Tauri's externalBin naming convention: <name>-<target-triple>.exe, flat in binaries/
 $destDir  = Join-Path $root "desktop\src-tauri\binaries"
