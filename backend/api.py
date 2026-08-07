@@ -1,10 +1,23 @@
 import re
 import json
+import sys
 import httpx
 import asyncio
+from pathlib import Path
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse, Response
+
+# Where the bundled frontend lives when running as the desktop/mono server.
+# When frontend/dist exists, one port (8000) serves BOTH the API and the UI.
+# A frozen (PyInstaller) build unpacks it into sys._MEIPASS.
+if getattr(sys, "frozen", False):
+    _BASE = Path(sys._MEIPASS)
+else:
+    _BASE = Path(__file__).resolve().parent.parent
+_FRONTEND_DIST = _BASE / "frontend" / "dist"
+_FRONTEND_INDEX = _FRONTEND_DIST / "index.html"
+_HAS_FRONTEND = _FRONTEND_INDEX.is_file()
 
 app = FastAPI(
     title="MovieBox API Pro",
@@ -128,6 +141,9 @@ async def _make_request(url: str, method: str = "GET", payload: dict = None, cus
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard():
+    # Desktop/mono mode: the root IS the app. Serve the built SPA shell.
+    if _HAS_FRONTEND:
+        return FileResponse(_FRONTEND_INDEX, media_type="text/html")
     html_content = """
     <!DOCTYPE html>
     <html lang="en">
@@ -585,6 +601,39 @@ async def get_captions(request: Request, subject_id: str, detail_path: str, se: 
     captions = inner.get("captions", []) if isinstance(inner, dict) else inner
     return {"subject_id": subject_id, "se": se, "ep": ep, "count": len(captions), "captions": captions}
 
+
+# ---------------------------------------------------------------- SPA
+# Desktop/mono mode catch-all. Registered LAST so /api-ish JSON routes win.
+# Real files (assets/, sw.js, manifest.webmanifest) are served as-is;
+# anything else is a client-side route and gets the SPA shell.
+
+def _safe_join(dist: Path, url_path: str) -> Path | None:
+    """Resolve a URL path inside dist, refusing traversal escapes."""
+    candidate = (dist / url_path).resolve()
+    try:
+        candidate.relative_to(dist.resolve())
+    except ValueError:
+        return None
+    return candidate
+
+
+@app.get("/{full_path:path}")
+async def spa_fallback(full_path: str):
+    if not _HAS_FRONTEND:
+        raise HTTPException(status_code=404, detail="Frontend not built. Run `npm run build` in frontend/.")
+    candidate = _safe_join(_FRONTEND_DIST, full_path)
+    if candidate and candidate.is_file():
+        return FileResponse(candidate)
+    return FileResponse(_FRONTEND_INDEX, media_type="text/html")
+
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("newapi:app", host="0.0.0.0", port=8000, reload=True)
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Mellow Movies mono server (API + built frontend)")
+    parser.add_argument("--host", default="0.0.0.0")
+    parser.add_argument("--port", type=int, default=8000)
+    args = parser.parse_args()
+
+    uvicorn.run(app, host=args.host, port=args.port, reload=False)

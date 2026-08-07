@@ -5,6 +5,7 @@ import Footer from "./Footer";
 import Toast from "../ui/Toast";
 import BackToTop from "../ui/BackToTop";
 import { fetchHome } from "../../api/client";
+import { emitAppReady } from "../../desktopBridge";
 
 /**
  * App shell: sticky navbar (with inline search), routed page content
@@ -16,6 +17,8 @@ export default function Layout() {
   // running after it. Cached by the API client for every consumer.
   useEffect(() => {
     fetchHome().catch(() => {});
+    // In the desktop shell, tell it we're up so it can close the splash.
+    emitAppReady();
   }, []);
 
   return (

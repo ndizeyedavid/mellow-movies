@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mellow Movies</title>
+  <style>
+    :root {
+      --bg: #141414;
+      --primary: #e50000;
+      --soft: #d7d7d7;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: radial-gradient(120% 120% at 50% 0%, #1d1d1d 0%, var(--bg) 60%);
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 22px;
+      overflow: hidden;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .logo {
+      font-size: 30px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+    }
+    .logo span { color: var(--primary); }
+    .tagline {
+      font-size: 12px;
+      color: var(--soft);
+      opacity: 0.8;
+      letter-spacing: 1.6px;
+      text-transform: uppercase;
+    }
+    .spinner {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: 3px solid rgba(255, 255, 255, 0.15);
+      border-top-color: var(--primary);
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="logo">Mellow <span>Movies</span></div>
+  <div class="tagline">Popcorn loading…</div>
+  <div class="spinner"></div>
+</body>
+</html>
