@@ -6,7 +6,6 @@ import {
   useLocation,
 } from "react-router-dom";
 import Layout from "./components/layout/Layout";
-import NavProgress from "./components/ui/NavProgress";
 
 // Route-level code splitting: each page (and its heavy deps — e.g. the
 // player's dash.js + hls.js on /watch) is fetched only when first visited.
@@ -159,10 +158,5 @@ const router = createBrowserRouter([
 ]);
 
 export default function App() {
-  return (
-    <>
-      <NavProgress />
-      <RouterProvider router={router} />
-    </>
-  );
+  return <RouterProvider router={router} />;
 }
