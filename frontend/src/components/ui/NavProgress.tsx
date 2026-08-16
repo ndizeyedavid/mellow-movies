@@ -1,24 +1,45 @@
-import { useEffect } from "react";
-import { useNavigation } from "react-router-dom";
+import { useEffect, useRef } from "react";
+import { useLocation } from "react-router-dom";
 import NProgress from "nprogress";
 import "nprogress/nprogress.css";
 
 /**
- * Thin wrapper around nprogress that starts when React Router
- * begins a navigation and finishes when it settles.
+ * Shows a progress bar on route transitions.
+ * Works with lazy-loaded routes (Suspense) by detecting location changes
+ * and using a small timeout to approximate navigation duration.
  */
 export default function NavProgress() {
-  const navigation = useNavigation();
+  const location = useLocation();
+  const isFirstMount = useRef(true);
+  const timeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (navigation.state === "loading") {
-      NProgress.start();
-    } else if (navigation.state === "idle") {
-      NProgress.done();
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      return;
     }
-  }, [navigation.state]);
 
-  // Configure nprogress once
+    NProgress.start();
+
+    // Clear any existing timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+
+    // Finish after a reasonable time or when next location change happens
+    // This works for both instant navigations and Suspense/lazy loading
+    timeoutRef.current = window.setTimeout(() => {
+      NProgress.done();
+    }, 3000); // max 3s
+
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, [location.pathname]);
+
+  // Configure once
   NProgress.configure({
     showSpinner: false,
     trickleSpeed: 200,
