@@ -25,6 +25,16 @@ import PlayerControls, {
 import { isTauri, onMediaKey, toggleMiniPlayer } from "../../desktopBridge";
 import { supportsNativeHls } from "../../utils/media";
 
+// Retry delays (ms) before retrying the same source. Transient CDN limits
+// (429/5xx) usually clear within a couple of seconds, so a bounded retry
+// beats jumping straight to the next candidate (which is just as limited).
+const RETRY_DELAYS = [1200, 3000];
+// Once a stream is actually playing, if the playhead doesn't advance for this
+// long (ms) and the video isn't paused/ended, the stream has stalled — e.g.
+// every segment request is getting rate-limited. Fall through to the next
+// candidate instead of dropping the user straight onto an error screen.
+const STALL_TIMEOUT = 10000;
+
 interface SubtitleTrack {
   lang: string;
   label: string;
@@ -78,9 +88,12 @@ export default function StreamPlayer({
   const dashRef = useRef<dashjs.MediaPlayerClass | null>(null);
   const startedRef = useRef(false);
   const hideTimerRef = useRef<number | undefined>(undefined);
-  // Remembers which source already got its one free retry (429s are often
-  // transient — one retry beats jumping straight to the next source).
-  const retriedSrcRef = useRef<string | null>(null);
+  // Per-source retry budget. Transient CDN limits (429/5xx) are common, so a
+  // source gets a few delayed retries before we move down the candidate list.
+  const retryCountRef = useRef(0);
+  // Last time the playhead advanced — the stall watchdog uses this to tell a
+  // stream that's truly dead mid-playback from a brief recoverable blip.
+  const lastProgressRef = useRef(0);
   // Resume target captured once per mount — the bootstrap effect re-runs on
   // source switches but must not seek again after the first metadata.
   const startAtRef = useRef(startAt);
@@ -168,6 +181,19 @@ export default function StreamPlayer({
     ? Math.max(fileIndex, 0)
     : currentLevel;
 
+  /** Advance to the next candidate source, or surface a fatal error when the
+   *  list is exhausted. Used when a source exhausts its retries or stalls. */
+  const tryNextSource = useCallback(() => {
+    retryCountRef.current = 0;
+    lastProgressRef.current = Date.now();
+    if (srcIndex + 1 >= srcs.length) {
+      setError(true);
+      setWaiting(false);
+    } else {
+      setSrcIndex((i) => i + 1);
+    }
+  }, [srcIndex, srcs.length]);
+
   /* ---------- Playback bootstrap (DASH, HLS or direct file) ---------- */
   useEffect(() => {
     const video = videoRef.current;
@@ -187,27 +213,21 @@ export default function StreamPlayer({
       }
       startAtRef.current = undefined;
     };
-    // Fatal failure on the current candidate. Transient CDN errors (429/5xx)
-    // are common — retry the same source once with a short delay, then move
-    // down the list. Once playback has actually started, stop and show error.
+    // Failure on the current candidate. Transient CDN limits (429/5xx) are
+    // common, so retry the same source a few times with a short backoff before
+    // advancing down the list. Once playback has actually started, never fail
+    // the whole stream on a single engine error — the STALL_TIMEOUT watchdog
+    // (below) is what decides a started stream has truly died.
     const fail = () => {
-      if (startedRef.current) {
-        setError(true);
-        setWaiting(false);
-        return;
-      }
-      if (retriedSrcRef.current !== src) {
-        retriedSrcRef.current = src;
+      if (startedRef.current) return;
+      const retries = retryCountRef.current;
+      if (retries < RETRY_DELAYS.length) {
+        retryCountRef.current = retries + 1;
         setWaiting(true);
-        window.setTimeout(() => setReloadKey((k) => k + 1), 1200);
+        window.setTimeout(() => setReloadKey((k) => k + 1), RETRY_DELAYS[retries]);
         return;
       }
-      if (srcIndex + 1 >= srcs.length) {
-        setError(true);
-        setWaiting(false);
-      } else {
-        setSrcIndex((i) => i + 1);
-      }
+      tryNextSource();
     };
 
     if (isDashSrc && dashjs.supportsMediaSource()) {
@@ -238,7 +258,12 @@ export default function StreamPlayer({
           );
         }
       });
-      dash.on(dashjs.MediaPlayer.events.ERROR, () => fail());
+      dash.on(dashjs.MediaPlayer.events.ERROR, () => {
+        // After playback starts, a fragment/segment 429 is transient — dash.js
+        // already retries internally. Let the STALL_TIMEOUT watchdog decide if
+        // the stream really died rather than killing it on the first error.
+        if (!startedRef.current) fail();
+      });
       dash.on(dashjs.MediaPlayer.events.QUALITY_CHANGE_RENDERED, (e) => {
         const ev = e as unknown as { newRepresentation?: { index?: number } };
         setCurrentLevel(ev.newRepresentation?.index ?? -1);
@@ -348,7 +373,25 @@ export default function StreamPlayer({
       video.removeAttribute("src");
       video.load();
     };
-  }, [src, srcs.length, srcIndex, reloadKey, isDashSrc, isHlsSrc]);
+  }, [src, srcs.length, srcIndex, reloadKey, isDashSrc, isHlsSrc, tryNextSource]);
+
+  /* ---------- Stall watchdog (stuck / rate-limited playback) ---------- */
+  // Once playing, if the playhead doesn't advance within STALL_TIMEOUT the
+  // stream has stalled (e.g. every segment request is rate-limited). Bump to
+  // the next candidate instead of dropping the user straight to an error.
+  useEffect(() => {
+    if (paused) return;
+    const v = videoRef.current;
+    if (!v) return;
+    lastProgressRef.current = Date.now();
+    const id = window.setInterval(() => {
+      if (v.ended || v.paused) return;
+      if (Date.now() - lastProgressRef.current > STALL_TIMEOUT) {
+        tryNextSource();
+      }
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [paused, src, reloadKey, tryNextSource]);
 
   /* ---------- Fullscreen / PiP state ---------- */
   useEffect(() => {
@@ -634,6 +677,7 @@ export default function StreamPlayer({
         onPlay={() => {
           setPaused(false);
           startedRef.current = true;
+          lastProgressRef.current = Date.now();
           showControls();
         }}
         onPause={() => {
@@ -641,10 +685,14 @@ export default function StreamPlayer({
           setControlsVisible(true);
         }}
         onWaiting={() => setWaiting(true)}
-        onPlaying={() => setWaiting(false)}
+        onPlaying={() => {
+          setWaiting(false);
+          lastProgressRef.current = Date.now();
+        }}
         onTimeUpdate={(e) => {
           const t = e.currentTarget.currentTime;
           setCurrentTime(t);
+          lastProgressRef.current = Date.now();
           updateBuffered();
           onProgress?.(t, e.currentTarget.duration || 0);
         }}

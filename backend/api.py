@@ -1,6 +1,7 @@
 import re
 import json
 import sys
+import time
 import httpx
 import asyncio
 from pathlib import Path
@@ -36,6 +37,12 @@ BASE_URL = "https://moviebox.ph"
 API_BASE = "https://h5-api.aoneroom.com/wefeed-h5api-bff"
 
 _bearer_token: str | None = None
+
+# The player domain is stable for long stretches, but get-domain is hit on
+# every stream/captions request. Cache it briefly so heavy viewing doesn't
+# rate-limit the upstream. Falls back to a sensible default on failure.
+_domain_cache: dict = {"domain": None, "ts": 0.0}
+_DOMAIN_CACHE_TTL = 600.0
 
 DEFAULT_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
@@ -138,6 +145,25 @@ async def _make_request(url: str, method: str = "GET", payload: dict = None, cus
         except Exception as e:
             if isinstance(e, HTTPException): raise e
             raise HTTPException(status_code=502, detail=f"Request failed: {str(e)}")
+
+
+async def _get_player_domain(client_ip: str = "") -> str:
+    """Return the cached player streaming domain, refreshing it at most every
+    `_DOMAIN_CACHE_TTL` seconds. get-domain is queried for every stream and
+    captions request, so caching it avoids hammering the upstream and being
+    rate-limited (429). Falls back to the cached/default domain on failure."""
+    now = time.monotonic()
+    if _domain_cache["domain"] and now - _domain_cache["ts"] < _DOMAIN_CACHE_TTL:
+        return _domain_cache["domain"]
+    try:
+        dom_data = await _make_request(f"{API_BASE}/media-player/get-domain", client_ip=client_ip)
+        domain = (dom_data.get("data") or "https://netfilm.world").rstrip("/")
+        _domain_cache["domain"] = domain
+        _domain_cache["ts"] = now
+    except HTTPException:
+        if not _domain_cache["domain"]:
+            _domain_cache["domain"] = "https://netfilm.world"
+    return _domain_cache["domain"]
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard():
@@ -510,9 +536,8 @@ async def get_movie_detail(request: Request, slug: str):
 @app.get("/api/stream/{subject_id}")
 async def get_stream_sources(request: Request, subject_id: str, detail_path: str, se: int = 1, ep: int = 1):
     ip = _client_ip(request)
-    # Step 1: get the player domain
-    dom_data = await _make_request(f"{API_BASE}/media-player/get-domain", client_ip=ip)
-    domain = dom_data.get("data", "https://netfilm.world").rstrip("/")
+    # Step 1: get the player domain (cached so we don't hit get-domain every call)
+    domain = await _get_player_domain(ip)
 
     # Step 2: build the Referer the way the real browser player does
     player_referer = (
@@ -522,18 +547,22 @@ async def get_stream_sources(request: Request, subject_id: str, detail_path: str
     play_url = f"{domain}/wefeed-h5api-bff/subject/play?subjectId={subject_id}&se={se}&ep={ep}&detailPath={detail_path}"
 
     async with httpx.AsyncClient(follow_redirects=True, timeout=25) as client:
-        # Retry once — the upstream can transiently 5xx under load, and the
-        # browser never sees the flaky call if the first attempt recovers.
+        # Retry on transient upstream failures (5xx) AND rate-limits (429),
+        # with a short backoff. One flaky call shouldn't kill the whole movie.
         resp = None
-        for attempt in range(2):
+        for attempt in range(3):
             try:
                 resp = await client.get(play_url, headers={**PLAYER_HEADERS, **_geo_headers(ip), "Referer": player_referer})
-                if resp.status_code < 500:
+                if resp.status_code not in (429, 500, 502, 503, 504):
                     break
             except httpx.HTTPError:
-                pass
-            if attempt == 0:
-                await asyncio.sleep(0.8)
+                resp = None
+            if attempt < 2:
+                await asyncio.sleep(0.4 * (attempt + 1))
+        if resp is None or resp.status_code != 200:
+            # Upstream is unavailable or rate-limited — surface a clean 502
+            # instead of crashing on a missing/empty JSON body.
+            raise HTTPException(status_code=502, detail="Upstream stream endpoint unavailable or rate-limited")
         data = resp.json().get("data", {})
 
     has_resource = data.get("hasResource", False)
@@ -564,8 +593,7 @@ async def get_stream_sources(request: Request, subject_id: str, detail_path: str
 @app.get("/api/stream/{subject_id}/captions")
 async def get_captions(request: Request, subject_id: str, detail_path: str, se: int = 1, ep: int = 1):
     ip = _client_ip(request)
-    dom_data = await _make_request(f"{API_BASE}/media-player/get-domain", client_ip=ip)
-    domain = dom_data.get("data", "https://netfilm.world").rstrip("/")
+    domain = await _get_player_domain(ip)
 
     player_referer = (
         f"{domain}/spa/videoPlayPage/movies/{detail_path}"
@@ -574,7 +602,18 @@ async def get_captions(request: Request, subject_id: str, detail_path: str, se: 
     play_url = f"{domain}/wefeed-h5api-bff/subject/play?subjectId={subject_id}&se={se}&ep={ep}&detailPath={detail_path}"
 
     async with httpx.AsyncClient(follow_redirects=True, timeout=25) as client:
-        play_resp = await client.get(play_url, headers={**PLAYER_HEADERS, **_geo_headers(ip), "Referer": player_referer})
+        play_resp = None
+        for attempt in range(3):
+            try:
+                play_resp = await client.get(play_url, headers={**PLAYER_HEADERS, **_geo_headers(ip), "Referer": player_referer})
+                if play_resp.status_code not in (429, 500, 502, 503, 504):
+                    break
+            except httpx.HTTPError:
+                play_resp = None
+            if attempt < 2:
+                await asyncio.sleep(0.4 * (attempt + 1))
+        if play_resp is None or play_resp.status_code != 200:
+            return {"subject_id": subject_id, "se": se, "ep": ep, "count": 0, "captions": []}
         play_data = play_resp.json().get("data", {})
 
     streams = play_data.get("streams", [])
