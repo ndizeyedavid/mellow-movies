@@ -347,111 +347,114 @@ function WatchContent({ item }: { item: MediaItem }) {
   const details = rawDetails.filter(([, v]) => v.length > 0);
 
   return (
-    <div className="section-gutter mx-auto w-full max-w-[1920px] py-6 2xl:py-10">
-      {/* Back */}
-      <button
-        onClick={() => navigate(-1)}
-        className="flex items-center gap-2 text-lg font-medium text-soft transition-colors duration-200 hover:text-white"
-      >
-        <img src={backIcon} alt="" className="h-5 w-5" />
-        Back
-      </button>
-
-      <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_420px] 2xl:gap-8">
-        {/* Player + info */}
-        <div className="flex min-w-0 flex-col gap-6">
-          <div className="overflow-hidden rounded-2xl border border-line bg-black shadow-2xl">
-            {loadingStream ? (
-              <div className="relative aspect-video w-full bg-black">
-                <BufferingIndicator />
-              </div>
-            ) : streamError || streamSrcs.length === 0 ? (
-              <div className="flex aspect-video w-full flex-col items-center justify-center gap-4 bg-black px-6 text-center">
-                <p className="max-w-sm text-lg text-soft">
-                  Stream unavailable for this title right now.
-                </p>
-              </div>
-            ) : (
-              <StreamPlayer
-                key={playerKey}
-                srcs={streamSrcs}
-                srcLabels={streamLabels}
-                poster={item.poster}
-                title={item.title}
-                subtitleTracks={captions}
-                startAt={resumeAt}
-                onProgress={handleProgress}
-                onEnded={handleEnded}
-              />
-            )}
+    <div className="pb-6 2xl:pb-10">
+      {/* Full-bleed player — spans the entire viewport width, ignoring the
+          container gutters. Everything below re-enters the padded container. */}
+      <div className="w-full bg-black">
+        {loadingStream ? (
+          <div className="relative aspect-video w-full bg-black">
+            <BufferingIndicator />
           </div>
-
-          {/* Now playing info */}
-          <div>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-              {isShow && (
-                <span className="rounded-md border border-primary/40 bg-primary/15 px-3 py-1.5 text-sm font-bold text-white">
-                  S{pick.season} : E{pick.episode}
-                </span>
-              )}
-              {meta.length > 0 && (
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                  {meta}
-                </div>
-              )}
-            </div>
-
-            <h1 className="mt-3 text-3xl font-extrabold leading-tight text-white lg:text-4xl">
-              {item.title}
-              {isShow && (
-                <span className="text-muted">
-                  {" "}
-                  — Season {pick.season}, Episode {pick.episode}
-                </span>
-              )}
-            </h1>
-
-            <p className="mt-3 max-w-3xl text-base leading-relaxed text-muted lg:text-lg">
-              {item.description ?? "No description available yet."}
+        ) : streamError || streamSrcs.length === 0 ? (
+          <div className="flex aspect-video w-full flex-col items-center justify-center gap-4 bg-black px-6 text-center">
+            <p className="max-w-sm text-lg text-soft">
+              Stream unavailable for this title right now.
             </p>
           </div>
-        </div>
-
-        {/* Side panel: episodes for series, details for movies */}
-        <aside className="min-w-0">
-          {isShow ? (
-            <EpisodePanel
-              item={item}
-              activeSeason={pick.season}
-              activeEpisode={pick.episode}
-              onSelect={(season, episode) => setPick({ season, episode })}
-            />
-          ) : details.length > 0 ? (
-            <div className="rounded-2xl border border-line bg-card p-6 sm:p-8">
-              <h2 className="text-xl font-bold text-white">Details</h2>
-              <dl className="mt-6 flex flex-col gap-5">
-                {details.map(([label, value]) => (
-                  <div key={label}>
-                    <dt className="text-sm font-medium uppercase tracking-wide text-muted">
-                      {label}
-                    </dt>
-                    <dd className="mt-1 text-base text-white">{value}</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-          ) : null}
-        </aside>
+        ) : (
+          <StreamPlayer
+            key={playerKey}
+            srcs={streamSrcs}
+            srcLabels={streamLabels}
+            poster={item.poster}
+            title={item.title}
+            subtitleTracks={captions}
+            startAt={resumeAt}
+            onProgress={handleProgress}
+            onEnded={handleEnded}
+          />
+        )}
       </div>
 
-      {/* Watch next */}
-      <div className="mt-14 2xl:mt-20">
-        <MediaRail
-          title="More Like This"
-          subtitle="Pick another title and keep watching"
-          items={recommendations}
-          cardTo={(m) => `/watch/${m.id}`}
-        />
+      <div className="section-gutter mx-auto w-full max-w-[1920px]">
+        {/* Back */}
+        <button
+          onClick={() => navigate(-1)}
+          className="mt-6 flex items-center gap-2 text-lg font-medium text-soft transition-colors duration-200 hover:text-white 2xl:mt-10"
+        >
+          <img src={backIcon} alt="" className="h-5 w-5" />
+          Back
+        </button>
+
+        <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_420px] 2xl:gap-8">
+          {/* Now playing info */}
+          <div className="flex min-w-0 flex-col gap-6">
+            <div>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                {isShow && (
+                  <span className="rounded-md border border-primary/40 bg-primary/15 px-3 py-1.5 text-sm font-bold text-white">
+                    S{pick.season} : E{pick.episode}
+                  </span>
+                )}
+                {meta.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    {meta}
+                  </div>
+                )}
+              </div>
+
+              <h1 className="mt-3 text-3xl font-extrabold leading-tight text-white lg:text-4xl">
+                {item.title}
+                {isShow && (
+                  <span className="text-muted">
+                    {" "}
+                    — Season {pick.season}, Episode {pick.episode}
+                  </span>
+                )}
+              </h1>
+
+              <p className="mt-3 max-w-3xl text-base leading-relaxed text-muted lg:text-lg">
+                {item.description ?? "No description available yet."}
+              </p>
+            </div>
+          </div>
+
+          {/* Side panel: episodes for series, details for movies */}
+          <aside className="min-w-0">
+            {isShow ? (
+              <EpisodePanel
+                item={item}
+                activeSeason={pick.season}
+                activeEpisode={pick.episode}
+                onSelect={(season, episode) => setPick({ season, episode })}
+              />
+            ) : details.length > 0 ? (
+              <div className="rounded-2xl border border-line bg-card p-6 sm:p-8">
+                <h2 className="text-xl font-bold text-white">Details</h2>
+                <dl className="mt-6 flex flex-col gap-5">
+                  {details.map(([label, value]) => (
+                    <div key={label}>
+                      <dt className="text-sm font-medium uppercase tracking-wide text-muted">
+                        {label}
+                      </dt>
+                      <dd className="mt-1 text-base text-white">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            ) : null}
+          </aside>
+        </div>
+
+        {/* Watch next */}
+        <div className="mt-14 2xl:mt-20">
+          <MediaRail
+            title="More Like This"
+            subtitle="Pick another title and keep watching"
+            items={recommendations}
+            cardTo={(m) => `/watch/${m.id}`}
+          />
+        </div>
       </div>
     </div>
   );
