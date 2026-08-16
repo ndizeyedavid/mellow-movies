@@ -6,6 +6,7 @@ import {
   useLocation,
 } from "react-router-dom";
 import Layout from "./components/layout/Layout";
+import { notifyPageLoaded } from "./utils/nprogress";
 
 // Route-level code splitting: each page (and its heavy deps — e.g. the
 // player's dash.js + hls.js on /watch) is fetched only when first visited.
@@ -33,8 +34,18 @@ function ScrollToTop() {
 }
 
 function PageFallback() {
+  // Marks the loading state so NavProgress can detect it, and completes the
+  // progress bar the moment the lazy route actually renders (unmount).
+  useEffect(() => {
+    return () => notifyPageLoaded();
+  }, []);
+
   return (
-    <div className="min-h-[60vh] animate-pulse bg-background" aria-hidden />
+    <div
+      data-route-loading
+      className="min-h-[60vh] animate-pulse bg-background"
+      aria-hidden
+    />
   );
 }
 

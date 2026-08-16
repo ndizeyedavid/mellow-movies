@@ -4,6 +4,7 @@ import Navbar from "./Navbar";
 import Footer from "./Footer";
 import Toast from "../ui/Toast";
 import BackToTop from "../ui/BackToTop";
+import NavProgress from "../ui/NavProgress";
 import { fetchHome } from "../../api/client";
 import { emitAppReady } from "../../desktopBridge";
 
@@ -24,6 +25,7 @@ export default function Layout() {
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <Navbar />
+      <NavProgress />
       <main className="flex-1">
         <Outlet />
       </main>

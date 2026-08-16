@@ -140,3 +140,20 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-line2);
 }
+
+/* Top navigation progress bar — themed to the brand red, sits above the
+   sticky navbar (z-40) so it's always visible during route changes.
+   The bar/peg selectors carry extra specificity so they beat nprogress's own
+   stylesheet regardless of import order. */
+#nprogress .bar {
+  background: var(--color-primary) !important;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  z-index: 1031;
+}
+#nprogress .peg {
+  box-shadow: 0 0 10px var(--color-primary), 0 0 5px var(--color-primary);
+}
