@@ -20,7 +20,6 @@ import SeekIndicator from "./SeekIndicator";
 import PlayerControls, {
   type PlayerAudioTrack,
   type PlayerMenu,
-  type PlayerSubtitle,
   type QualityLevel,
 } from "./PlayerControls";
 import { isTauri, onMediaKey, toggleMiniPlayer } from "../../desktopBridge";
@@ -119,14 +118,24 @@ export default function StreamPlayer({
   const [currentLevel, setCurrentLevel] = useState(-1);
   const [audioTracks, setAudioTracks] = useState<PlayerAudioTrack[]>([]);
   const [currentAudioTrack, setCurrentAudioTrack] = useState(-1);
-  const [subtitleTracksState, setSubtitleTracksState] = useState<
-    PlayerSubtitle[]
-  >([]);
   const [activeSubtitle, setActiveSubtitle] = useState<string | null>(null);
   const [menu, setMenu] = useState<PlayerMenu>(null);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPip, setIsPip] = useState(false);
+
+  /* ---------- Subtitle menu list ---------- */
+  // iOS native HLS is unreliable at exposing <track> elements through
+  // video.textTracks, so build the subtitle menu straight from the props.
+  // Clamped to the first 8 tracks to keep the panel tidy.
+  const subtitleTracksState = useMemo(
+    () =>
+      subtitleTracks.slice(0, 8).map((t, i) => ({
+        id: String(i),
+        label: t.label || t.lang || `Track ${i + 1}`,
+      })),
+    [subtitleTracks],
+  );
 
   /* ---------- Direct-file quality ---------- */
   // MP4 playback is a single file per resolution; build the quality menu
@@ -345,9 +354,23 @@ export default function StreamPlayer({
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const onChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    const v = videoRef.current;
+    const sync = () =>
+      setIsFullscreen(
+        Boolean(document.fullscreenElement) ||
+          Boolean(
+            v && (v as HTMLVideoElement & { webkitDisplayingFullscreen?: boolean })
+              .webkitDisplayingFullscreen,
+          ),
+      );
+    const onChange = () => sync();
     el.addEventListener("fullscreenchange", onChange);
-    return () => el.removeEventListener("fullscreenchange", onChange);
+    // Legacy WebKit fullscreen — the only API iOS Safari supports.
+    el.addEventListener("webkitfullscreenchange", onChange);
+    return () => {
+      el.removeEventListener("fullscreenchange", onChange);
+      el.removeEventListener("webkitfullscreenchange", onChange);
+    };
   }, []);
 
   useEffect(() => {
@@ -361,18 +384,6 @@ export default function StreamPlayer({
   }, []);
 
   /* ---------- Subtitle menu source ---------- */
-  const refreshSubtitleTracks = useCallback(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    const tracks = Array.from(v.textTracks)
-      .filter((t) => t.kind === "subtitles")
-      .map((t, i) => ({
-        id: String(i),
-        label: t.label || t.language || `Track ${i + 1}`,
-      }));
-    setSubtitleTracksState(tracks);
-  }, []);
-
   /* ---------- Auto-hide controls ---------- */
   const scheduleHide = useCallback(() => {
     window.clearTimeout(hideTimerRef.current);
@@ -512,18 +523,28 @@ export default function StreamPlayer({
   };
 
   const onSubtitleChange = (id: string | null) => {
-    const v = videoRef.current;
-    if (!v) return;
     setActiveSubtitle(id);
-    Array.from(v.textTracks).forEach((t, i) => {
-      if (t.kind !== "subtitles") return;
-      t.mode = id !== null && String(i) === id ? "showing" : "hidden";
-    });
+    // Rendered as a single remounted <track> (see JSX): remounting the track
+    // forces the browser to (re)load + show the chosen caption, which is the
+    // only way to reliably switch external WebVTT tracks on iOS native HLS.
   };
 
   const onToggleFullscreen = () => {
     const el = containerRef.current;
-    if (!el) return;
+    const v = videoRef.current;
+    if (!el || !v) return;
+    const webkit = v as HTMLVideoElement & {
+      webkitEnterFullscreen?: () => void;
+      webkitExitFullscreen?: () => void;
+      webkitDisplayingFullscreen?: boolean;
+    };
+    // iOS Safari: element.requestFullscreen() is unsupported — only the
+    // legacy video webkitEnter/ExitFullscreen APIs play in native fullscreen.
+    if (typeof webkit.webkitEnterFullscreen === "function") {
+      if (webkit.webkitDisplayingFullscreen) webkit.webkitExitFullscreen?.();
+      else webkit.webkitEnterFullscreen();
+      return;
+    }
     if (document.fullscreenElement) void document.exitFullscreen();
     else void el.requestFullscreen();
   };
@@ -641,15 +662,20 @@ export default function StreamPlayer({
         playsInline
         crossOrigin={isHlsSrc && !supportsNativeHls ? "anonymous" : undefined}
       >
-        {subtitleTracks.map((t, i) => (
+        {/* Captions render as ONE remounted <track>. Keying by selection makes
+            React replace the element, which makes iOS native HLS load and show
+            the picked language (toggling mode on pre-mounted tracks is flaky
+            there). `default` hints the active one should display immediately. */}
+        {subtitleTracks[Number(activeSubtitle)] && (
           <track
-            key={`${t.lang}-${i}`}
+            key={`cap-${activeSubtitle}`}
             kind="subtitles"
-            srcLang={t.lang}
-            label={t.label}
-            src={t.src}
+            default={true}
+            srcLang={subtitleTracks[Number(activeSubtitle)].lang}
+            label={subtitleTracks[Number(activeSubtitle)].label}
+            src={subtitleTracks[Number(activeSubtitle)].src}
           />
-        ))}
+        )}
       </video>
 
       {/* Center play button — sits above the controls bar (z-30) so it is
@@ -750,7 +776,6 @@ export default function StreamPlayer({
         onToggleFullscreen={onToggleFullscreen}
         onTogglePip={onTogglePip}
         onMenu={(m) => {
-          if (m === "subs") refreshSubtitleTracks();
           setMenu((prev) => (prev === m ? null : m));
         }}
       />
