@@ -24,6 +24,7 @@ import PlayerControls, {
   type QualityLevel,
 } from "./PlayerControls";
 import { isTauri, onMediaKey, toggleMiniPlayer } from "../../desktopBridge";
+import { supportsNativeHls } from "../../utils/media";
 
 interface SubtitleTrack {
   lang: string;
@@ -242,6 +243,22 @@ export default function StreamPlayer({
       return () => {
         dash.reset();
         dashRef.current = null;
+      };
+    }
+
+    if (isHlsSrc && supportsNativeHls) {
+      // Native HLS (Safari / iOS / iPadOS). Played by the browser itself —
+      // no MSE, no hls.js. Crucially, do NOT set crossOrigin on the <video>
+      // for this path: iOS treats "anonymous" as a strict CORS fetch for every
+      // segment and refuses playback if the server drops the CORS headers.
+      video.src = src;
+      video.addEventListener("loadedmetadata", onMetadata);
+      video.addEventListener("error", fail);
+      return () => {
+        video.removeEventListener("loadedmetadata", onMetadata);
+        video.removeEventListener("error", fail);
+        video.removeAttribute("src");
+        video.load();
       };
     }
 
@@ -622,7 +639,7 @@ export default function StreamPlayer({
         }}
         className="h-full w-full object-contain"
         playsInline
-        crossOrigin={isHlsSrc ? "anonymous" : undefined}
+        crossOrigin={isHlsSrc && !supportsNativeHls ? "anonymous" : undefined}
       >
         {subtitleTracks.map((t, i) => (
           <track

@@ -25,6 +25,7 @@ import {
   saveProgress,
 } from "../store/progress";
 import type { MediaItem } from "../data/mockData";
+import { supportsNativeHls } from "../utils/media";
 import StreamPlayer from "../components/player/StreamPlayer";
 import BufferingIndicator from "../components/player/BufferingIndicator";
 import EpisodePanel from "../components/player/EpisodePanel";
@@ -201,20 +202,40 @@ function WatchContent({ item }: { item: MediaItem }) {
           );
         const srcs: string[] = [];
         const labels: string[] = [];
-        if (dashEntry) {
-          srcs.push(dashEntry.url);
-          labels.push(
-            `DASH${dashEntry.resolutions ? ` · ${dashEntry.resolutions}` : ""}`,
-          );
+        // Safari / iOS play HLS natively — prefer it (then plain MP4) over
+        // DASH, whose MVC/MSE path is unreliable there. Everywhere else DASH
+        // stays first (moviebox's native, highest-quality path).
+        if (supportsNativeHls) {
+          if (hlsUrl) {
+            srcs.push(hlsUrl);
+            labels.push("HLS");
+          }
+          mp4s.forEach((s) => {
+            srcs.push(s.url);
+            labels.push(s.resolution);
+          });
+          if (dashEntry) {
+            srcs.push(dashEntry.url);
+            labels.push(
+              `DASH${dashEntry.resolutions ? ` · ${dashEntry.resolutions}` : ""}`,
+            );
+          }
+        } else {
+          if (dashEntry) {
+            srcs.push(dashEntry.url);
+            labels.push(
+              `DASH${dashEntry.resolutions ? ` · ${dashEntry.resolutions}` : ""}`,
+            );
+          }
+          if (hlsUrl) {
+            srcs.push(hlsUrl);
+            labels.push("HLS");
+          }
+          mp4s.forEach((s) => {
+            srcs.push(s.url);
+            labels.push(s.resolution);
+          });
         }
-        if (hlsUrl) {
-          srcs.push(hlsUrl);
-          labels.push("HLS");
-        }
-        mp4s.forEach((s) => {
-          srcs.push(s.url);
-          labels.push(s.resolution);
-        });
 
         // The moviebox API serves SRT subtitles; convert each to a WebVTT
         // blob URL so the browser's native <track> can actually play it.
