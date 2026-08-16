@@ -5,16 +5,17 @@ import {
   FaVolumeHigh,
   FaVolumeXmark,
   FaClosedCaptioning,
-  FaGaugeHigh,
   FaDisplay,
   FaExpand,
   FaCompress,
   FaCheck,
   FaLanguage,
   FaXmark,
+  FaMaximize,
+  FaMinimize,
 } from "react-icons/fa6";
 
-export type PlayerMenu = "quality" | "speed" | "audio" | "subs" | null;
+export type PlayerMenu = "quality" | "audio" | "subs" | null;
 
 export interface QualityLevel {
   height: number;
@@ -42,7 +43,6 @@ interface PlayerControlsProps {
   buffered: number;
   volume: number;
   muted: boolean;
-  playbackRate: number;
   levels: QualityLevel[];
   currentLevel: number; // -1 = Auto
   /** Whether the stream supports adaptive rendition switching (DASH/HLS).
@@ -54,21 +54,21 @@ interface PlayerControlsProps {
   activeSubtitle: string | null;
   isFullscreen: boolean;
   isPip: boolean;
+  /** Current player layout — reflected by the view toggle button. */
+  view?: "wide" | "boxed";
   menu: PlayerMenu;
   onTogglePlay(): void;
   onSeek(t: number): void;
   onVolume(v: number): void;
   onToggleMute(): void;
-  onRateChange(r: number): void;
   onLevelChange(level: number): void;
   onAudioTrackChange(id: number): void;
   onSubtitleChange(id: string | null): void;
   onToggleFullscreen(): void;
   onTogglePip(): void;
+  onToggleView?(): void;
   onMenu(m: PlayerMenu): void;
 }
-
-const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
 const fmtTime = (s: number) => {
   if (!Number.isFinite(s) || s < 0) return "0:00";
@@ -81,7 +81,6 @@ const fmtTime = (s: number) => {
 
 const MENU_TITLES: Record<Exclude<PlayerMenu, null>, string> = {
   quality: "Quality",
-  speed: "Playback Speed",
   audio: "Audio",
   subs: "Subtitles",
 };
@@ -93,7 +92,7 @@ function barFraction(e: ReactPointerEvent | PointerEvent, el: HTMLElement) {
 
 /**
  * Player control bar: seek + buffered bar, play/pause, volume,
- * time, settings menus (quality / speed / audio / subtitles), PiP
+ * time, settings menus (quality / audio / subtitles), view toggle, PiP
  * and fullscreen. Menus open as a panel above the bar.
  */
 export default function PlayerControls(props: PlayerControlsProps) {
@@ -106,7 +105,6 @@ export default function PlayerControls(props: PlayerControlsProps) {
     buffered,
     volume,
     muted,
-    playbackRate,
     levels,
     currentLevel,
     adaptive = true,
@@ -116,6 +114,7 @@ export default function PlayerControls(props: PlayerControlsProps) {
     activeSubtitle,
     isFullscreen,
     isPip,
+    view = "wide",
     menu,
   } = props;
 
@@ -205,17 +204,6 @@ export default function PlayerControls(props: PlayerControlsProps) {
           </button>
 
           <button
-            onClick={() => props.onMenu(menu === "speed" ? null : "speed")}
-            aria-expanded={menu === "speed"}
-            aria-haspopup="menu"
-            className={`${menuBtn(menu === "speed")} hidden sm:flex`}
-            title="Playback speed"
-          >
-            <FaGaugeHigh className="h-4 w-4" />
-            <span className="tabular-nums">{playbackRate}x</span>
-          </button>
-
-          <button
             onClick={() => props.onMenu(menu === "quality" ? null : "quality")}
             aria-expanded={menu === "quality"}
             aria-haspopup="menu"
@@ -233,6 +221,19 @@ export default function PlayerControls(props: PlayerControlsProps) {
             title="Picture in picture"
           >
             <FaDisplay className="h-4 w-4" />
+          </button>
+
+          <button
+            onClick={props.onToggleView}
+            aria-label={view === "wide" ? "Compact view" : "Wide view"}
+            className={`${iconBtn} hidden sm:flex`}
+            title={view === "wide" ? "Compact view" : "Wide view"}
+          >
+            {view === "wide" ? (
+              <FaMinimize className="h-4 w-4" />
+            ) : (
+              <FaMaximize className="h-4 w-4" />
+            )}
           </button>
 
           <button
@@ -287,16 +288,6 @@ export default function PlayerControls(props: PlayerControlsProps) {
                   ))}
               </>
             )}
-
-            {menu === "speed" &&
-              SPEED_OPTIONS.map((r) => (
-                <MenuOption
-                  key={r}
-                  label={`${r}x`}
-                  active={playbackRate === r}
-                  onClick={() => props.onRateChange(r)}
-                />
-              ))}
 
             {menu === "audio" &&
               audioTracks.map((t) => (

@@ -43,18 +43,20 @@ interface StreamPlayerProps {
   subtitleTracks: SubtitleTrack[];
   /** Resume playback from this position (seconds) once metadata loads. */
   startAt?: number;
+  /** Current player layout — surfaced as a control-bar toggle. */
+  view?: "wide" | "boxed";
+  /** Called when the user toggles the player layout. */
+  onToggleView?: () => void;
   /** Reported on every timeupdate — the page uses it to save progress. */
   onProgress?: (position: number, duration: number) => void;
   /** Fired when the media finishes playing (drives "up next"). */
   onEnded?: () => void;
 }
 
-const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2];
-
 /**
  * MovieBox-style streaming player built on dash.js + hls.js:
  * adaptive quality (Auto + all renditions), audio tracks, subtitles,
- * playback speed, seek/volume, fullscreen and picture-in-picture.
+ * seek/volume, fullscreen and picture-in-picture.
  * DASH is preferred (moviebox's native path), falling back to HLS or
  * a direct MP4 file when a candidate fails to start.
  */
@@ -65,6 +67,8 @@ export default function StreamPlayer({
   title = "Video",
   subtitleTracks,
   startAt,
+  view = "wide",
+  onToggleView,
   onProgress,
   onEnded,
 }: StreamPlayerProps) {
@@ -110,7 +114,6 @@ export default function StreamPlayer({
   const [buffered, setBuffered] = useState(0);
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
-  const [rate, setRate] = useState(1);
   const [levels, setLevels] = useState<QualityLevel[]>([]);
   const [currentLevel, setCurrentLevel] = useState(-1);
   const [audioTracks, setAudioTracks] = useState<PlayerAudioTrack[]>([]);
@@ -467,12 +470,6 @@ export default function StreamPlayer({
     v.muted = !v.muted;
   };
 
-  const onRateChange = (r: number) => {
-    const v = videoRef.current;
-    if (!v) return;
-    v.playbackRate = r;
-  };
-
   const onLevelChange = (level: number) => {
     if (dashRef.current) {
       if (level >= 0) {
@@ -708,7 +705,6 @@ export default function StreamPlayer({
         buffered={buffered}
         volume={volume}
         muted={muted}
-        playbackRate={rate}
         levels={effectiveLevels}
         currentLevel={effectiveCurrentLevel}
         adaptive={!isFileSrc}
@@ -718,6 +714,8 @@ export default function StreamPlayer({
         activeSubtitle={activeSubtitle}
         isFullscreen={isFullscreen}
         isPip={isPip}
+        view={view}
+        onToggleView={onToggleView}
         menu={menu}
         onTogglePlay={() => {
           clearPendingTap();
@@ -726,10 +724,6 @@ export default function StreamPlayer({
         onSeek={onSeek}
         onVolume={onVolume}
         onToggleMute={onToggleMute}
-        onRateChange={(r) => {
-          setRate(r);
-          onRateChange(r);
-        }}
         onLevelChange={onLevelChange}
         onAudioTrackChange={onAudioTrackChange}
         onSubtitleChange={(id) => {
@@ -746,5 +740,3 @@ export default function StreamPlayer({
     </div>
   );
 }
-
-export { SPEED_OPTIONS };

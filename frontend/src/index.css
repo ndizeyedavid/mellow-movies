@@ -126,6 +126,19 @@ body {
   }
 }
 
+/* Player layout switch — fades and slightly zooms the new view in when the
+   user toggles between the full-bleed and boxed player layouts. */
+@keyframes player-view-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 /* Subtle custom scrollbar to match the dark theme */
 ::-webkit-scrollbar {
   width: 10px;
