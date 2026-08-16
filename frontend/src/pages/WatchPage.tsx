@@ -5,7 +5,7 @@ import {
   Link,
   useSearchParams,
 } from "react-router-dom";
-import { FaStar } from "react-icons/fa6";
+import { FaStar, FaArrowUpRightFromSquare } from "react-icons/fa6";
 import {
   fetchCaptions,
   fetchCatalog,
@@ -398,6 +398,20 @@ function WatchContent({ item }: { item: MediaItem }) {
         <p className="max-w-sm text-lg text-soft">
           Stream unavailable for this title right now.
         </p>
+        <p className="max-w-md text-sm text-soft/70">
+          The source is temporarily down, overloaded, or rate-limited on our
+          end. You can try again shortly, or watch it on a mirror site that
+          serves the same media with fewer ads.
+        </p>
+        <a
+          href="https://movibox.net"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 font-bold text-white transition hover:bg-primary/80"
+        >
+          <FaArrowUpRightFromSquare className="h-4 w-4" />
+          Watch on Movibox
+        </a>
       </div>
     ) : (
       viewToggle
