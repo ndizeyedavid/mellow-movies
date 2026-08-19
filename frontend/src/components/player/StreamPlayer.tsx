@@ -217,6 +217,16 @@ export default function StreamPlayer({
         video.currentTime = Math.min(resume, video.duration - 1);
       }
       startAtRef.current = undefined;
+      // Kick playback now that real data is attached (metadata loaded). This
+      // must wait for metadata — calling play() earlier (right after the
+      // engine init, e.g. dash.js's initialize) races the MediaSource setup
+      // and can leave the stream permanently stuck loading. Once the movie is
+      // playing, `userWantsPlayRef` stays true so a source retry resumes
+      // automatically instead of dropping back to the play button.
+      if (autoPlayedRef.current || userWantsPlayRef.current) {
+        void video.play().catch(() => {});
+      }
+      autoPlayedRef.current = true;
     };
     // Failure on the current candidate. Transient CDN limits (429/5xx) are
     // common, so retry the same source a few times with a short backoff before
@@ -233,16 +243,6 @@ export default function StreamPlayer({
         return;
       }
       tryNextSource();
-    };
-    // Autoplay on first load, and keep playback alive across source retries:
-    // once the movie is playing, a reload for a transient error must resume
-    // automatically instead of dropping back to the play button. Browsers may
-    // block the very first call without a user gesture — that rejection is
-    // swallowed and the center play button stays visible as the fallback.
-    const kickPlay = () => {
-      if (autoPlayedRef.current && !userWantsPlayRef.current) return;
-      autoPlayedRef.current = true;
-      void video.play().catch(() => {});
     };
 
     if (isDashSrc && dashjs.supportsMediaSource()) {
@@ -288,7 +288,6 @@ export default function StreamPlayer({
       dash.updateSettings({
         streaming: { buffer: { fastSwitchEnabled: true } },
       });
-      kickPlay();
 
       return () => {
         dash.reset();
@@ -304,7 +303,6 @@ export default function StreamPlayer({
       video.src = src;
       video.addEventListener("loadedmetadata", onMetadata);
       video.addEventListener("error", fail);
-      kickPlay();
       return () => {
         video.removeEventListener("loadedmetadata", onMetadata);
         video.removeEventListener("error", fail);
@@ -358,7 +356,6 @@ export default function StreamPlayer({
 
       hls.loadSource(src);
       hls.attachMedia(video);
-      kickPlay();
 
       return () => {
         hls.destroy();
@@ -371,7 +368,6 @@ export default function StreamPlayer({
       video.src = src;
       video.addEventListener("loadedmetadata", onMetadata);
       video.addEventListener("error", fail);
-      kickPlay();
       return () => {
         video.removeEventListener("loadedmetadata", onMetadata);
         video.removeEventListener("error", fail);
@@ -386,7 +382,6 @@ export default function StreamPlayer({
     video.src = src;
     video.addEventListener("loadedmetadata", onMetadata);
     video.addEventListener("error", fail);
-    kickPlay();
     return () => {
       video.removeEventListener("loadedmetadata", onMetadata);
       video.removeEventListener("error", fail);
@@ -735,7 +730,6 @@ export default function StreamPlayer({
         }}
         className="h-full w-full object-contain"
         playsInline
-        autoPlay
         crossOrigin={isHlsSrc && !supportsNativeHls ? "anonymous" : undefined}
       >
         {/* Captions render as ONE remounted <track>. Keying by selection makes
