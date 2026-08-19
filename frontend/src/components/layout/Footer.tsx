@@ -1,10 +1,14 @@
 import { Link } from "react-router-dom";
-import { FaInstagram } from "react-icons/fa6";
+import { FaGithub } from "react-icons/fa6";
 import { footerColumns } from "../../data/mockData";
 import logoMark from "../../assets/logo-mark.svg";
 
 const socials = [
-  { label: "Instagram", icon: <FaInstagram className="h-5 w-5" /> },
+  {
+    label: "Github",
+    icon: <FaGithub className="h-5 w-5" />,
+    to: "https://github.com/ndizeyedavid/mellow-movies",
+  },
 ];
 
 /**
@@ -55,7 +59,8 @@ export default function Footer() {
               {socials.map((s) => (
                 <a
                   key={s.label}
-                  href="#"
+                  href={s.to}
+                  target="_blank"
                   aria-label={s.label}
                   className="flex h-12 w-12 items-center justify-center rounded-lg border border-line bg-card text-white transition-all duration-200 hover:border-line2 hover:text-primary"
                 >

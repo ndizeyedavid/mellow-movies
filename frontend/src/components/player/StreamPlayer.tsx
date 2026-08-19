@@ -94,6 +94,11 @@ export default function StreamPlayer({
   // Last time the playhead advanced — the stall watchdog uses this to tell a
   // stream that's truly dead mid-playback from a brief recoverable blip.
   const lastProgressRef = useRef(0);
+  // Autoplay/resume intent. `autoPlayedRef` marks the first autoplay attempt;
+  // `userWantsPlayRef` stays true once playback is underway so source retries
+  // (e.g. a 429) resume automatically instead of dropping back to the button.
+  const autoPlayedRef = useRef(false);
+  const userWantsPlayRef = useRef(false);
   // Resume target captured once per mount — the bootstrap effect re-runs on
   // source switches but must not seek again after the first metadata.
   const startAtRef = useRef(startAt);
@@ -229,6 +234,16 @@ export default function StreamPlayer({
       }
       tryNextSource();
     };
+    // Autoplay on first load, and keep playback alive across source retries:
+    // once the movie is playing, a reload for a transient error must resume
+    // automatically instead of dropping back to the play button. Browsers may
+    // block the very first call without a user gesture — that rejection is
+    // swallowed and the center play button stays visible as the fallback.
+    const kickPlay = () => {
+      if (autoPlayedRef.current && !userWantsPlayRef.current) return;
+      autoPlayedRef.current = true;
+      void video.play().catch(() => {});
+    };
 
     if (isDashSrc && dashjs.supportsMediaSource()) {
       const dash = dashjs.MediaPlayer().create();
@@ -273,6 +288,7 @@ export default function StreamPlayer({
       dash.updateSettings({
         streaming: { buffer: { fastSwitchEnabled: true } },
       });
+      kickPlay();
 
       return () => {
         dash.reset();
@@ -288,6 +304,7 @@ export default function StreamPlayer({
       video.src = src;
       video.addEventListener("loadedmetadata", onMetadata);
       video.addEventListener("error", fail);
+      kickPlay();
       return () => {
         video.removeEventListener("loadedmetadata", onMetadata);
         video.removeEventListener("error", fail);
@@ -341,6 +358,7 @@ export default function StreamPlayer({
 
       hls.loadSource(src);
       hls.attachMedia(video);
+      kickPlay();
 
       return () => {
         hls.destroy();
@@ -353,6 +371,7 @@ export default function StreamPlayer({
       video.src = src;
       video.addEventListener("loadedmetadata", onMetadata);
       video.addEventListener("error", fail);
+      kickPlay();
       return () => {
         video.removeEventListener("loadedmetadata", onMetadata);
         video.removeEventListener("error", fail);
@@ -367,6 +386,7 @@ export default function StreamPlayer({
     video.src = src;
     video.addEventListener("loadedmetadata", onMetadata);
     video.addEventListener("error", fail);
+    kickPlay();
     return () => {
       video.removeEventListener("loadedmetadata", onMetadata);
       video.removeEventListener("error", fail);
@@ -457,8 +477,13 @@ export default function StreamPlayer({
   const togglePlay = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
-    if (v.paused) void v.play();
-    else v.pause();
+    if (v.paused) {
+      userWantsPlayRef.current = true;
+      void v.play().catch(() => {});
+    } else {
+      userWantsPlayRef.current = false;
+      v.pause();
+    }
   }, []);
 
   const onSeek = (t: number) => {
@@ -677,6 +702,7 @@ export default function StreamPlayer({
         onPlay={() => {
           setPaused(false);
           startedRef.current = true;
+          userWantsPlayRef.current = true;
           lastProgressRef.current = Date.now();
           showControls();
         }}
@@ -704,10 +730,12 @@ export default function StreamPlayer({
         }}
         onEnded={() => {
           setPaused(true);
+          userWantsPlayRef.current = false;
           onEnded?.();
         }}
         className="h-full w-full object-contain"
         playsInline
+        autoPlay
         crossOrigin={isHlsSrc && !supportsNativeHls ? "anonymous" : undefined}
       >
         {/* Captions render as ONE remounted <track>. Keying by selection makes
@@ -726,17 +754,18 @@ export default function StreamPlayer({
         )}
       </video>
 
-      {/* Center play button — sits above the controls bar (z-30) so it is
+      {/* Center play button — sits above the controls bar (z-40) so it is
           always pressable; the full-area layer lets clicks pass through to
-          the video, while the circle itself stays interactive. */}
-      {paused && !error && (
+          the video, while the circle itself stays interactive. Hidden while
+          the source is still loading (the buffering indicator covers that). */}
+      {paused && !error && !waiting && (
         <button
           onClick={() => {
             clearPendingTap();
             togglePlay();
           }}
           aria-label={`Play ${title}`}
-          className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-black/10 transition-colors hover:bg-black/25"
+          className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-black/10 transition-colors hover:bg-black/25"
         >
           <span className="pointer-events-auto flex h-20 w-20 items-center justify-center rounded-full border border-white/20 bg-black/50 backdrop-blur-md transition-transform duration-200 hover:scale-105">
             <FaPlay className="ml-1 h-7 w-7 text-white" />
@@ -745,8 +774,10 @@ export default function StreamPlayer({
       )}
 
       {/* Buffering indicator — circular progress with a fake percentage so
-          the user always sees something happening while the stream loads. */}
-      {waiting && !paused && !error && <BufferingIndicator />}
+          the user always sees something happening while the stream loads.
+          Shown from the very start (even before first play) so the
+          source-finding phase never looks frozen. */}
+      {waiting && !error && <BufferingIndicator />}
 
       {/* Double-tap seek flash feedback */}
       {seekFlash && (
