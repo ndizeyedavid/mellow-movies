@@ -220,10 +220,10 @@ export default function StreamPlayer({
       // Kick playback now that real data is attached (metadata loaded). This
       // must wait for metadata — calling play() earlier (right after the
       // engine init, e.g. dash.js's initialize) races the MediaSource setup
-      // and can leave the stream permanently stuck loading. Once the movie is
-      // playing, `userWantsPlayRef` stays true so a source retry resumes
-      // automatically instead of dropping back to the play button.
-      if (autoPlayedRef.current || userWantsPlayRef.current) {
+      // and can leave the stream permanently stuck loading. Attempt autoplay
+      // on first load; afterwards, only resume automatically if the movie was
+      // already playing (a source retry shouldn't drop back to the button).
+      if (!autoPlayedRef.current || userWantsPlayRef.current) {
         void video.play().catch(() => {});
       }
       autoPlayedRef.current = true;
