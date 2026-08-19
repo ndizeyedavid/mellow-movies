@@ -44,6 +44,25 @@ _bearer_token: str | None = None
 _domain_cache: dict = {"domain": None, "ts": 0.0}
 _DOMAIN_CACHE_TTL = 600.0
 
+# Section types the home page renders as content rows. Anything else (live
+# sports, appointment lists, filter widgets, ads) is never a movie row.
+_HOME_ROW_TYPES = ("BANNER", "SUBJECTS_MOVIE", "SUBJECTS_TV", "SUBJECTS_ANIMATION", "CUSTOM")
+
+# Sections that are music, playlists, albums or kids' song compilations have
+# no place on a movie home page — matched against section titles.
+_MUSIC_SECTION_RE = re.compile(
+    r"\b(song|songs|music|playlist|album|ost|karaoke|nursery|rhyme|lullab"
+    r"|zouglou|concert|live performance|learn and grow|learning)\b|\[mv\]",
+    re.IGNORECASE,
+)
+
+# Strong per-item music markers, in case a stray song leaks into a movie row.
+_MUSIC_ITEM_RE = re.compile(
+    r"\[mv\]|\(mv\)|\bplaylist\b|\bost\b|\bkaraoke\b|\bnursery rhyme\b"
+    r"|\blullab\w*\b|\bofficial video\b|\bmusic video\b",
+    re.IGNORECASE,
+)
+
 DEFAULT_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
     "Referer": "https://moviebox.ph/",
@@ -440,28 +459,70 @@ async def get_home(request: Request):
     url = f"{API_BASE}/home?host=moviebox.ph"
     data = await _make_request(url, client_ip=_client_ip(request))
     sections = []
+    seen_titles: set[str] = set()
     for op in data.get("data", {}).get("operatingList", []) or []:
         op_type = op.get("type")
-        title = op.get("title", "Featured")
+        title = (op.get("title") or "Featured").strip()
+
+        # Skip non-row widget types (live sports, appointment lists, filters).
+        if op_type not in _HOME_ROW_TYPES:
+            continue
+        # Never surface music, playlists or kids' song compilations.
+        if _MUSIC_SECTION_RE.search(title):
+            continue
+        # Ignore empty rows and duplicate titles.
+        if not title or title in seen_titles:
+            continue
+
+        def _clean(items_source):
+            out = []
+            for sub in items_source:
+                name = sub.get("title")
+                if not name or _MUSIC_ITEM_RE.search(name):
+                    continue
+                out.append({
+                    "name": name,
+                    "poster_url": sub.get("cover", {}).get("url"),
+                    "slug": sub.get("detailPath"),
+                    "subject_id": sub.get("subjectId"),
+                    "badge": sub.get("corner"),
+                    "rating": sub.get("imdbRatingValue"),
+                })
+            return out
+
         if op_type == "BANNER":
-            items = [{
-                "name": item.get("title") or (item.get("subject") or {}).get("title"),
-                "poster_url": item.get("image", {}).get("url") or (item.get("subject") or {}).get("cover", {}).get("url"),
-                "slug": item.get("detailPath") or (item.get("subject") or {}).get("detailPath"),
-                "subject_id": (item.get("subject") or {}).get("subjectId"),
-                "badge": (item.get("subject") or {}).get("corner")
-            } for item in op.get("banner", {}).get("items", []) if item.get("title") and "Communities" not in item.get("title")]
-            sections.append({"section": "Banner", "count": len(items), "items": items})
-        elif op_type in ["SUBJECTS_MOVIE", "SUBJECTS_TV", "SUBJECTS_ANIMATION"]:
-            items = [{
-                "name": sub.get("title"),
-                "poster_url": sub.get("cover", {}).get("url"),
-                "slug": sub.get("detailPath"),
-                "subject_id": sub.get("subjectId"),
-                "badge": sub.get("corner"),
-                "rating": sub.get("imdbRatingValue")
-            } for sub in op.get("subjects", [])]
-            sections.append({"section": title, "count": len(items), "items": items})
+            items = []
+            for item in op.get("banner", {}).get("items", []):
+                sub = item.get("subject") or {}
+                name = item.get("title") or sub.get("title")
+                if not name or "Communities" in name or _MUSIC_ITEM_RE.search(name):
+                    continue
+                items.append({
+                    "name": name,
+                    "poster_url": item.get("image", {}).get("url") or sub.get("cover", {}).get("url"),
+                    "slug": item.get("detailPath") or sub.get("detailPath"),
+                    "subject_id": sub.get("subjectId"),
+                    "badge": sub.get("corner"),
+                })
+            if items:
+                sections.append({"section": "Banner", "count": len(items), "items": items})
+                seen_titles.add("Banner")
+        elif op_type in ("SUBJECTS_MOVIE", "SUBJECTS_TV", "SUBJECTS_ANIMATION"):
+            items = _clean(op.get("subjects", []))
+            if items:
+                sections.append({"section": title, "count": len(items), "items": items})
+                seen_titles.add(title)
+        elif op_type == "CUSTOM":
+            # CUSTOM rows carry their subjects inside customData.items.
+            subs = []
+            for item in op.get("customData", {}).get("items", []) or []:
+                sub = item.get("subject") or {}
+                if sub.get("title"):
+                    subs.append(sub)
+            items = _clean(subs)
+            if items:
+                sections.append({"section": title, "count": len(items), "items": items})
+                seen_titles.add(title)
     return {"status": "success", "sections": sections}
 
 async def _get_category_data(tab_id: int, page: int = 1, per_page: int = 24, sort: str = "RECOMMEND", genre: str = "ALL", client_ip: str = "") -> dict:
