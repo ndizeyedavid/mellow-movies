@@ -494,49 +494,67 @@ function WatchContent({ item }: { item: MediaItem }) {
     </button>
   );
 
-  // "Boxed" layout — the original: player sits beside the details / episode
-  // panel, everything padded by the container.
-  if (view === "boxed") {
-    return (
-      <div
-        key="boxed"
-        className="section-gutter mx-auto w-full max-w-[1920px] animate-[player-view-in_0.45s_ease-out] py-6 2xl:py-10"
-      >
-        {backButton}
+  // "Boxed" (theater/contained) vs "Wide" (full-bleed) are the SAME tree —
+  // toggling `view` only swaps wrapper classes. The player lives in a single
+  // stable slot, so the <video> is never unmounted and the stream keeps
+  // playing without reloading or refetching. Only the side panel moves: it
+  // sits on the right of the player in boxed mode, and below it in wide mode.
+  const isBoxed = view === "boxed";
 
-        <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_420px] 2xl:gap-8">
-          <div className="flex min-w-0 flex-col gap-6">
-            <div className="overflow-hidden rounded-2xl border border-line bg-black shadow-2xl">
-              {playerArea}
-            </div>
-            {infoSection}
-          </div>
-          {sidePanel}
-        </div>
-
-        <div className="mt-14 2xl:mt-20">{watchNext}</div>
-      </div>
-    );
-  }
-
-  // "Wide" layout (default): player spans the full viewport, everything else
-  // re-enters the padded container.
   return (
     <div
-      key="wide"
-      className="animate-[player-view-in_0.45s_ease-out] pb-6 2xl:pb-10"
+      className={`animate-[player-view-in_0.45s_ease-out] ${
+        isBoxed
+          ? "section-gutter mx-auto w-full max-w-[1920px] py-6 2xl:py-10"
+          : "pb-6 2xl:pb-10"
+      }`}
     >
-      <div className="w-full bg-black">{playerArea}</div>
+      {/* Player row — in boxed mode the side panel shares this row on the right */}
+      <div
+        className={
+          isBoxed
+            ? "mt-5 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_420px] 2xl:gap-8"
+            : "block"
+        }
+      >
+        {/* Player — single, stable slot */}
+        <div className="min-w-0">
+          <div
+            className={
+              isBoxed
+                ? "overflow-hidden rounded-2xl border border-line bg-black shadow-2xl"
+                : "relative z-0 w-full bg-black"
+            }
+          >
+            {playerArea}
+          </div>
+        </div>
 
-      <div className="section-gutter mx-auto w-full max-w-[1920px]">
-        <div className="mt-6 2xl:mt-10">{backButton}</div>
+        {/* Right sidebar — episodes/details, beside the player in boxed mode */}
+        {isBoxed && <aside className="min-w-0">{sidePanel}</aside>}
+      </div>
+
+      <div
+        className={
+          isBoxed ? "" : "section-gutter mx-auto w-full max-w-[1920px]"
+        }
+      >
+        <div className={isBoxed ? "mt-5" : "mt-6 2xl:mt-10"}>{backButton}</div>
 
         <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_420px] 2xl:gap-8">
           <div className="flex min-w-0 flex-col gap-6">{infoSection}</div>
-          {sidePanel}
+          {!isBoxed && <aside className="min-w-0">{sidePanel}</aside>}
         </div>
+      </div>
 
-        <div className="mt-14 2xl:mt-20">{watchNext}</div>
+      <div
+        className={
+          isBoxed
+            ? "mt-14 2xl:mt-20"
+            : "section-gutter mx-auto w-full max-w-[1920px] mt-14 2xl:mt-20"
+        }
+      >
+        {watchNext}
       </div>
     </div>
   );
