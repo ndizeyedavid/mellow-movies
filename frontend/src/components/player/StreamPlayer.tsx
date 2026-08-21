@@ -127,6 +127,14 @@ export default function StreamPlayer({
   const [paused, setPaused] = useState(true);
   const [waiting, setWaiting] = useState(true);
   const [error, setError] = useState(false);
+  // Captured media-error detail (video.error.code/message) surfaced on the
+  // error screen so device-specific failures (e.g. older iOS native HLS)
+  // can be diagnosed from the phone without devtools.
+  const [mediaError, setMediaError] = useState<string | null>(null);
+  // On iOS, native HLS is tried first. If older iOS Safari rejects a stream
+  // natively (while newer iOS plays it), flip this and replay the same source
+  // through hls.js (MSE) instead of giving up on the whole title.
+  const [useHlsFallback, setUseHlsFallback] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [buffered, setBuffered] = useState(0);
@@ -160,6 +168,9 @@ export default function StreamPlayer({
   // from the candidate list (adaptive DASH/HLS entries are excluded — those
   // expose their own renditions through the player engine).
   const isFileSrc = !isDashSrc && !isHlsSrc;
+  // Native HLS is used on Safari/iOS unless we've switched to the hls.js
+  // fallback for this source (older iOS that rejects native playback).
+  const useNativeHls = isHlsSrc && supportsNativeHls && !useHlsFallback;
   const fileEntries = useMemo(
     () =>
       srcs
@@ -190,6 +201,7 @@ export default function StreamPlayer({
    *  list is exhausted. Used when a source exhausts its retries or stalls. */
   const tryNextSource = useCallback(() => {
     retryCountRef.current = 0;
+    setUseHlsFallback(false);
     lastProgressRef.current = Date.now();
     if (srcIndex + 1 >= srcs.length) {
       setError(true);
@@ -206,6 +218,7 @@ export default function StreamPlayer({
 
     setWaiting(true);
     setError(false);
+    setMediaError(null);
     startedRef.current = false;
 
     const onMetadata = () => {
@@ -277,6 +290,8 @@ export default function StreamPlayer({
         // After playback starts, a fragment/segment 429 is transient — dash.js
         // already retries internally. Let the STALL_TIMEOUT watchdog decide if
         // the stream really died rather than killing it on the first error.
+        const ve = video.error;
+        if (ve) setMediaError(`dash error code ${ve.code}`);
         if (!startedRef.current) fail();
       });
       dash.on(dashjs.MediaPlayer.events.QUALITY_CHANGE_RENDERED, (e) => {
@@ -295,17 +310,36 @@ export default function StreamPlayer({
       };
     }
 
-    if (isHlsSrc && supportsNativeHls) {
+    if (useNativeHls) {
       // Native HLS (Safari / iOS / iPadOS). Played by the browser itself —
       // no MSE, no hls.js. Crucially, do NOT set crossOrigin on the <video>
       // for this path: iOS treats "anonymous" as a strict CORS fetch for every
       // segment and refuses playback if the server drops the CORS headers.
+      const onMediaError = () => {
+        const ve = video.error;
+        setMediaError(
+          ve
+            ? `media error code ${ve.code}${ve.message ? ` — ${ve.message}` : ""}`
+            : "media error (unknown)",
+        );
+        // Older iOS sometimes fatally rejects a stream that newer iOS plays
+        // natively. Replay the same source through hls.js (MSE) instead.
+        if (Hls.isSupported() && !useHlsFallback) {
+          setUseHlsFallback(true);
+          setReloadKey((k) => k + 1);
+          return;
+        }
+        fail();
+      };
       video.src = src;
+      // Nudge old iOS Safari (iPhone X / iOS 16 and earlier) to actually begin
+      // loading the manifest — assigning src alone is sometimes not enough there.
+      video.load();
       video.addEventListener("loadedmetadata", onMetadata);
-      video.addEventListener("error", fail);
+      video.addEventListener("error", onMediaError);
       return () => {
         video.removeEventListener("loadedmetadata", onMetadata);
-        video.removeEventListener("error", fail);
+        video.removeEventListener("error", onMediaError);
         video.removeAttribute("src");
         video.load();
       };
@@ -365,12 +399,22 @@ export default function StreamPlayer({
 
     if (isHlsSrc && video.canPlayType("application/vnd.apple.mpegurl")) {
       // Native HLS (Safari)
+      const onMediaError = () => {
+        const ve = video.error;
+        setMediaError(
+          ve
+            ? `media error code ${ve.code}${ve.message ? ` — ${ve.message}` : ""}`
+            : "media error (unknown)",
+        );
+        fail();
+      };
       video.src = src;
+      video.load();
       video.addEventListener("loadedmetadata", onMetadata);
-      video.addEventListener("error", fail);
+      video.addEventListener("error", onMediaError);
       return () => {
         video.removeEventListener("loadedmetadata", onMetadata);
-        video.removeEventListener("error", fail);
+        video.removeEventListener("error", onMediaError);
         video.removeAttribute("src");
         video.load();
       };
@@ -379,16 +423,26 @@ export default function StreamPlayer({
     // Direct MP4 (or any other file) — play natively. Also the graceful
     // fallback for HLS when hls.js is unavailable; errors surface through
     // the video "error" event below.
+    const onMediaError = () => {
+      const ve = video.error;
+      setMediaError(
+        ve
+          ? `media error code ${ve.code}${ve.message ? ` — ${ve.message}` : ""}`
+          : "media error (unknown)",
+      );
+      fail();
+    };
     video.src = src;
+    video.load();
     video.addEventListener("loadedmetadata", onMetadata);
-    video.addEventListener("error", fail);
+    video.addEventListener("error", onMediaError);
     return () => {
       video.removeEventListener("loadedmetadata", onMetadata);
-      video.removeEventListener("error", fail);
+      video.removeEventListener("error", onMediaError);
       video.removeAttribute("src");
       video.load();
     };
-  }, [src, srcs.length, srcIndex, reloadKey, isDashSrc, isHlsSrc, tryNextSource]);
+  }, [src, srcs.length, srcIndex, reloadKey, isDashSrc, isHlsSrc, useNativeHls, useHlsFallback, tryNextSource]);
 
   /* ---------- Stall watchdog (stuck / rate-limited playback) ---------- */
   // Once playing, if the playhead doesn't advance within STALL_TIMEOUT the
@@ -730,7 +784,7 @@ export default function StreamPlayer({
         }}
         className="h-full w-full object-contain"
         playsInline
-        crossOrigin={isHlsSrc && !supportsNativeHls ? "anonymous" : undefined}
+        crossOrigin={isHlsSrc && !useNativeHls ? "anonymous" : undefined}
       >
         {/* Captions render as ONE remounted <track>. Keying by selection makes
             React replace the element, which makes iOS native HLS load and show
@@ -801,6 +855,9 @@ export default function StreamPlayer({
           <p className="max-w-sm text-lg text-soft">
             Stream unavailable. Check your connection and try again.
           </p>
+          {mediaError && (
+            <p className="max-w-sm text-xs text-muted">{mediaError}</p>
+          )}
           <button
             onClick={() => setReloadKey((k) => k + 1)}
             className="flex items-center gap-2 rounded-lg bg-primary px-6 py-3 text-base font-semibold text-white transition-colors hover:bg-primary-dark"
