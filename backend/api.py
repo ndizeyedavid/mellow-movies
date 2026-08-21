@@ -4,10 +4,11 @@ import sys
 import time
 import httpx
 import asyncio
+import urllib.parse
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, FileResponse, Response
+from fastapi.responses import HTMLResponse, FileResponse, Response, StreamingResponse
 
 # Where the bundled frontend lives when running as the desktop/mono server.
 # When frontend/dist exists, one port (8000) serves BOTH the API and the UI.
@@ -700,6 +701,124 @@ async def get_captions(request: Request, subject_id: str, detail_path: str, se: 
     inner = data.get("data", {})
     captions = inner.get("captions", []) if isinstance(inner, dict) else inner
     return {"subject_id": subject_id, "se": se, "ep": ep, "count": len(captions), "captions": captions}
+
+
+# ---------------------------------------------------------------- HLS PROXY
+# Older iOS Safari (<= iOS 16) cannot play fMP4/CMAF HLS natively and rejects
+# it with MEDIA_ERR_SRC_NOT_SUPPORTED, while newer iOS/macOS play it fine.
+# hls.js CAN play fMP4 on old iOS via MSE, but MSE segment fetches require
+# CORS. Rather than depend on the CDN sending CORS headers, we proxy the
+# manifest and every segment/key through our own origin (same-origin, so no
+# CORS needed). The manifest is rewritten so all child playlists, segments and
+# keys point back at these proxy routes.
+_HLS_PROXY_PATH = "/api/proxy/hls"
+_SEGMENT_PROXY_PATH = "/api/proxy/seg"
+
+
+def _encode_proxy_url(target: str) -> str:
+    # Child playlists (.m3u8) recurse through the manifest proxy; everything
+    # else (segments, keys, subtitles) goes through the segment proxy.
+    path = _HLS_PROXY_PATH if ".m3u8" in target else _SEGMENT_PROXY_PATH
+    return f"{path}?u={urllib.parse.quote(target, safe='')}"
+
+
+def _rewrite_manifest(body: str, base_url: str) -> str:
+    """Rewrite every absolute or relative URI in an HLS playlist to go through
+    our proxy. Handles both standalone URIs (segments, child playlists) and
+    URI="..." attributes (keys, subtitles, audio tracks)."""
+    out = []
+
+    def _uri_repl(m: re.Match) -> str:
+        inner = m.group(1)
+        if inner.startswith(("http://", "https://")):
+            return f'URI="{_encode_proxy_url(inner)}"'
+        if inner.startswith((_HLS_PROXY_PATH, _SEGMENT_PROXY_PATH)):
+            return m.group(0)
+        return f'URI="{_encode_proxy_url(urllib.parse.urljoin(base_url, inner))}"'
+
+    for line in body.splitlines():
+        s = line.strip()
+        if s.startswith("#"):
+            if 'URI="' in line:
+                line = re.sub(r'URI="([^"]+)"', _uri_repl, line)
+            out.append(line)
+        elif s == "":
+            out.append(line)
+        else:
+            if s.startswith(("http://", "https://")):
+                out.append(_encode_proxy_url(s))
+            elif s.startswith((_HLS_PROXY_PATH, _SEGMENT_PROXY_PATH)):
+                out.append(s)
+            else:
+                out.append(_encode_proxy_url(urllib.parse.urljoin(base_url, s)))
+    return "\n".join(out) + "\n"
+
+
+@app.get(_HLS_PROXY_PATH)
+async def proxy_hls(u: str = Query(..., description="Absolute HLS manifest URL")):
+    headers = {
+        **PLAYER_HEADERS,
+        "Referer": "https://moviebox.ph/",
+        "Origin": "https://moviebox.ph",
+        "Accept": "*/*",
+    }
+    async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
+        r = await client.get(u, headers=headers)
+        if r.status_code != 200:
+            raise HTTPException(status_code=r.status_code, detail="Upstream manifest error")
+        text = _rewrite_manifest(r.text, u)
+    return Response(
+        content=text,
+        media_type="application/vnd.apple.mpegurl",
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@app.get(_SEGMENT_PROXY_PATH)
+async def proxy_seg(request: Request, u: str = Query(..., description="Absolute segment/key URL")):
+    headers = {
+        **PLAYER_HEADERS,
+        "Referer": "https://moviebox.ph/",
+        "Origin": "https://moviebox.ph",
+        "Accept": "*/*",
+    }
+    range_hdr = request.headers.get("range")
+    if range_hdr:
+        headers["Range"] = range_hdr
+    async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
+        upstream = await client.send(
+            client.build_request("GET", u, headers=headers), stream=True
+        )
+        status = upstream.status_code
+        ctype = upstream.headers.get("content-type", "application/octet-stream")
+        accept_ranges = upstream.headers.get("accept-ranges", "bytes")
+        content_length = upstream.headers.get("content-length")
+        content_range = upstream.headers.get("content-range")
+
+        async def _iter():
+            async for chunk in upstream.aiter_bytes(chunk_size=256 * 1024):
+                yield chunk
+            await upstream.aclose()
+
+        resp_headers = {
+            "Access-Control-Allow-Origin": "*",
+            "Accept-Ranges": accept_ranges,
+            "Cache-Control": "no-store",
+            "Content-Type": ctype,
+        }
+        if content_range:
+            resp_headers["Content-Range"] = content_range
+        if content_length:
+            resp_headers["Content-Length"] = content_length
+        return StreamingResponse(
+            _iter(),
+            status_code=status,
+            headers=resp_headers,
+            media_type=ctype,
+        )
 
 
 # ---------------------------------------------------------------- SPA

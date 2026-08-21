@@ -391,7 +391,11 @@ export default function StreamPlayer({
         }
       });
 
-      hls.loadSource(src);
+      // When this is the iOS fallback, load through our same-origin proxy so
+      // MSE can fetch the fMP4 segments without depending on CDN CORS headers.
+      hls.loadSource(
+        useHlsFallback ? `/api/proxy/hls?u=${encodeURIComponent(src)}` : src,
+      );
       hls.attachMedia(video);
 
       return () => {
