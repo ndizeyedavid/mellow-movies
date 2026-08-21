@@ -378,6 +378,9 @@ export default function StreamPlayer({
       });
 
       hls.on(Hls.Events.ERROR, (_e, data) => {
+        setMediaError(
+          `hls error: ${data.type}${data.details ? ` (${data.details})` : ""}`,
+        );
         if (!data.fatal) return;
         if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
           hls.startLoad();
@@ -856,7 +859,7 @@ export default function StreamPlayer({
             Stream unavailable. Check your connection and try again.
           </p>
           {mediaError && (
-            <p className="max-w-sm text-xs text-muted">{mediaError}</p>
+            <p className="max-w-sm text-sm text-muted">{mediaError}</p>
           )}
           <button
             onClick={() => setReloadKey((k) => k + 1)}
