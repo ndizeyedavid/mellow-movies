@@ -102,7 +102,8 @@ export default function EpisodePanel({
                   </span>
                 </span>
                 {active && (
-                  <FaCheck className="h-4 w-4 shrink-0 text-primary" />
+                  // <FaCheck className="h-4 w-4 shrink-0 text-primary" />
+                  <img src="/animations/watching.gif" className="size-10" />
                 )}
               </button>
             </li>
