@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { FaPlay, FaCheck } from "react-icons/fa6";
+import { FaPlay } from "react-icons/fa6";
 import type { MediaItem } from "../../data/mockData";
 
 interface EpisodePanelProps {
