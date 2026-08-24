@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   useParams,
   useNavigate,
@@ -167,6 +167,10 @@ function WatchContent({ item }: { item: MediaItem }) {
     captions: Array<{ lang: string; label: string; src: string }>;
   } | null>(null);
   const [recommendations, setRecommendations] = useState<MediaItem[]>([]);
+  // Bumped to re-fetch fresh stream URLs when a signed (proxied) source
+  // expires mid-playback; the player calls this and resumes from progress.
+  const [refreshTick, setRefreshTick] = useState(0);
+  const handleRefreshSources = useCallback(() => setRefreshTick((t) => t + 1), []);
 
   const isShow = item.type === "show" && (item.seasonMap?.length ?? 0) > 0;
   // Movies live under "season 0" in the moviebox catalog; TV shows use
@@ -267,7 +271,7 @@ function WatchContent({ item }: { item: MediaItem }) {
       alive = false;
       blobUrls.forEach((u) => URL.revokeObjectURL(u));
     };
-  }, [item.subjectId, item.id, se, ep, playerKey]);
+  }, [item.subjectId, item.id, se, ep, playerKey, refreshTick]);
 
   // Derived stream state.
   const loadingStream = streamSnap?.key !== playerKey;
@@ -395,6 +399,7 @@ function WatchContent({ item }: { item: MediaItem }) {
       startAt={resumeAt}
       onProgress={handleProgress}
       onEnded={handleEnded}
+      onRefreshSources={handleRefreshSources}
     />
   );
 

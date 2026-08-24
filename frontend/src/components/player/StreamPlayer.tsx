@@ -29,6 +29,10 @@ import { supportsNativeHls } from "../../utils/media";
 // (429/5xx) usually clear within a couple of seconds, so a bounded retry
 // beats jumping straight to the next candidate (which is just as limited).
 const RETRY_DELAYS = [1200, 3000];
+// How many times we re-fetch fresh signed URLs before giving up. The
+// hakunaymatata CDN signs its MP4/HLS URLs with a `t=` expiry; if one dies
+// mid-movie we grab a new batch rather than showing an error.
+const MAX_SOURCE_REFRESH = 3;
 // Once a stream is actually playing, if the playhead doesn't advance for this
 // long (ms) and the video isn't paused/ended, the stream has stalled — e.g.
 // every segment request is getting rate-limited. Fall through to the next
@@ -61,6 +65,9 @@ interface StreamPlayerProps {
   onProgress?: (position: number, duration: number) => void;
   /** Fired when the media finishes playing (drives "up next"). */
   onEnded?: () => void;
+  /** Called when a signed (proxied) source expires mid-stream so the page can
+   *  re-fetch a fresh batch of URLs and resume without dropping the user. */
+  onRefreshSources?: () => void;
 }
 
 /**
@@ -81,6 +88,7 @@ export default function StreamPlayer({
   onToggleView,
   onProgress,
   onEnded,
+  onRefreshSources,
 }: StreamPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -99,6 +107,9 @@ export default function StreamPlayer({
   // (e.g. a 429) resume automatically instead of dropping back to the button.
   const autoPlayedRef = useRef(false);
   const userWantsPlayRef = useRef(false);
+  // Auto-refresh bookkeeping for expired signed sources.
+  const refreshAttemptsRef = useRef(0);
+  const pendingRefreshRef = useRef(false);
   // Resume target captured once per mount — the bootstrap effect re-runs on
   // source switches but must not seek again after the first metadata.
   const startAtRef = useRef(startAt);
@@ -204,12 +215,30 @@ export default function StreamPlayer({
     setUseHlsFallback(false);
     lastProgressRef.current = Date.now();
     if (srcIndex + 1 >= srcs.length) {
+      // Whole candidate list exhausted. If these were signed/proxied URLs
+      // (hakunaymatata) the batch has likely expired — re-fetch a fresh set
+      // and resume, instead of surfacing a fatal error.
+      if (pendingRefreshRef.current) return;
+      const isRefreshable = /\/api\/proxy\//i.test(src);
+      if (
+        isRefreshable &&
+        onRefreshSources &&
+        refreshAttemptsRef.current < MAX_SOURCE_REFRESH
+      ) {
+        pendingRefreshRef.current = true;
+        refreshAttemptsRef.current += 1;
+        setError(false);
+        setWaiting(true);
+        setSrcIndex(0);
+        onRefreshSources();
+        return;
+      }
       setError(true);
       setWaiting(false);
     } else {
       setSrcIndex((i) => i + 1);
     }
-  }, [srcIndex, srcs.length]);
+  }, [srcIndex, srcs.length, src, onRefreshSources]);
 
   /* ---------- Playback bootstrap (DASH, HLS or direct file) ---------- */
   useEffect(() => {
@@ -247,6 +276,9 @@ export default function StreamPlayer({
     // the whole stream on a single engine error — the STALL_TIMEOUT watchdog
     // (below) is what decides a started stream has truly died.
     const fail = () => {
+      // A refresh of expired signed URLs is in flight — don't burn retries on
+      // the stale URL, just wait for the fresh batch to arrive.
+      if (pendingRefreshRef.current) return;
       if (startedRef.current) return;
       const retries = retryCountRef.current;
       if (retries < RETRY_DELAYS.length) {
@@ -463,11 +495,42 @@ export default function StreamPlayer({
     const id = window.setInterval(() => {
       if (v.ended || v.paused) return;
       if (Date.now() - lastProgressRef.current > STALL_TIMEOUT) {
+        // A stalled proxied (signed) source is almost always an expired URL —
+        // re-fetch a fresh batch and resume, instead of draining every
+        // resolution one by one.
+        if (pendingRefreshRef.current) return;
+        const isRefreshable = /\/api\/proxy\//i.test(src);
+        if (
+          isRefreshable &&
+          onRefreshSources &&
+          refreshAttemptsRef.current < MAX_SOURCE_REFRESH
+        ) {
+          pendingRefreshRef.current = true;
+          refreshAttemptsRef.current += 1;
+          setError(false);
+          setWaiting(true);
+          setSrcIndex(0);
+          onRefreshSources();
+          return;
+        }
         tryNextSource();
       }
     }, 1000);
     return () => window.clearInterval(id);
-  }, [paused, src, reloadKey, tryNextSource]);
+  }, [paused, src, reloadKey, onRefreshSources, tryNextSource]);
+
+  // Keep the resume point in sync with the prop, so an auto-refresh of expired
+  // URLs can resume from where playback died (the parent passes the latest
+  // saved progress position).
+  useEffect(() => {
+    startAtRef.current = startAt;
+  }, [startAt]);
+
+  // Fresh candidates arrived (initial load or an auto-refresh of expired signed
+  // URLs) — clear the refresh-in-flight flag so future stalls can refresh again.
+  useEffect(() => {
+    pendingRefreshRef.current = false;
+  }, [srcs]);
 
   /* ---------- Fullscreen / PiP state ---------- */
   useEffect(() => {
