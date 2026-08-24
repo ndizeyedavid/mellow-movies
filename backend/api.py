@@ -627,7 +627,31 @@ async def get_stream_sources(request: Request, subject_id: str, detail_path: str
             raise HTTPException(status_code=502, detail="Upstream stream endpoint unavailable or rate-limited")
         data = resp.json().get("data", {})
 
-    has_resource = data.get("hasResource", False)
+        # Best-effort fetch of direct MP4 downloads. These are progressive
+        # H.264 files on the hakunaymatata CDN that play on EVERY device
+        # (including older iOS that can't play fMP4 HLS) and they cover titles
+        # whose HLS/DASH is "unavailable". The endpoint requires a specific
+        # Referer or it returns nothing.
+        downloads = []
+        try:
+            dl_url = (
+                f"{API_BASE}/subject/download"
+                f"?subjectId={subject_id}&se={se}&ep={ep}&detailPath={detail_path}"
+            )
+            dl_resp = await client.get(
+                dl_url,
+                headers={
+                    **DEFAULT_HEADERS,
+                    "Referer": "https://videodownloader.site/",
+                    "Origin": "https://videodownloader.site/",
+                },
+            )
+            if dl_resp.status_code == 200:
+                downloads = dl_resp.json().get("data", {}).get("downloads", [])
+        except httpx.HTTPError:
+            downloads = []
+
+    has_resource = bool(data.get("hasResource", False))
     streams = [
         {
             "resolution": f"{s.get('resolutions')}p",
@@ -639,6 +663,25 @@ async def get_stream_sources(request: Request, subject_id: str, detail_path: str
         }
         for s in data.get("streams", [])
     ]
+    # Merge the direct MP4 downloads as candidates. They are the most
+    # universally compatible source and the fix for "unavailable" titles.
+    for d in downloads:
+        if d.get("vipLocked"):
+            continue
+        url = d.get("url")
+        if not url:
+            continue
+        streams.append(
+            {
+                "resolution": f"{d.get('resolution')}p",
+                "format": "MP4",
+                "url": url,
+                "size": d.get("size"),
+                "duration": d.get("duration"),
+                "codec": d.get("codecName"),
+            }
+        )
+    has_resource = has_resource or bool(streams)
     return {
         "subject_id": subject_id,
         "se": se,
@@ -722,6 +765,16 @@ def _encode_proxy_url(target: str) -> str:
     return f"{path}?u={urllib.parse.quote(target, safe='')}"
 
 
+def _media_referer(target: str) -> str:
+    """The hakunaymatata CDN only serves media when the request carries the
+    videodownloader.site Referer; everything else uses the moviebox Referer."""
+    return (
+        "https://videodownloader.site/"
+        if "hakunaymatata.com" in target
+        else "https://moviebox.ph/"
+    )
+
+
 def _rewrite_manifest(body: str, base_url: str) -> str:
     """Rewrite every absolute or relative URI in an HLS playlist to go through
     our proxy. Handles both standalone URIs (segments, child playlists) and
@@ -756,10 +809,11 @@ def _rewrite_manifest(body: str, base_url: str) -> str:
 
 @app.get(_HLS_PROXY_PATH)
 async def proxy_hls(u: str = Query(..., description="Absolute HLS manifest URL")):
+    ref = _media_referer(u)
     headers = {
-        **PLAYER_HEADERS,
-        "Referer": "https://moviebox.ph/",
-        "Origin": "https://moviebox.ph",
+        "User-Agent": PLAYER_HEADERS["User-Agent"],
+        "Referer": ref,
+        "Origin": ref,
         "Accept": "*/*",
     }
     async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
@@ -779,10 +833,11 @@ async def proxy_hls(u: str = Query(..., description="Absolute HLS manifest URL")
 
 @app.get(_SEGMENT_PROXY_PATH)
 async def proxy_seg(request: Request, u: str = Query(..., description="Absolute segment/key URL")):
+    ref = _media_referer(u)
     headers = {
-        **PLAYER_HEADERS,
-        "Referer": "https://moviebox.ph/",
-        "Origin": "https://moviebox.ph",
+        "User-Agent": PLAYER_HEADERS["User-Agent"],
+        "Referer": ref,
+        "Origin": ref,
         "Accept": "*/*",
     }
     range_hdr = request.headers.get("range")

@@ -193,8 +193,18 @@ function WatchContent({ item }: { item: MediaItem }) {
         // down the list if one candidate fails to start.
         const dashEntry = stream.dash.find((d) => d.url);
         const hlsUrl = stream.hls[0]?.url;
+        // The hakunaymatata CDN only serves media with the videodownloader.site
+        // Referer, which the browser can't set itself — so pipe those URLs
+        // through our same-origin proxy (it sets the Referer server-side).
+        // These are progressive H.264 MP4s that play on every device.
+        const proxyUrl = (u: string) =>
+          /hakunaymatata\.com/i.test(u)
+            ? `/api/proxy/seg?u=${encodeURIComponent(u)}`
+            : u;
+        const isMp4 = (s: { url?: string; format?: string }) =>
+          !!s.url && (/\.mp4(\?|$)/i.test(s.url) || s.format === "MP4");
         const mp4s = [...stream.sources]
-          .filter((s) => s.url)
+          .filter(isMp4)
           .sort(
             (a, b) =>
               (RES_PRIORITY[b.resolution.toUpperCase()] ?? 0) -
@@ -211,7 +221,7 @@ function WatchContent({ item }: { item: MediaItem }) {
             labels.push("HLS");
           }
           mp4s.forEach((s) => {
-            srcs.push(s.url);
+            srcs.push(proxyUrl(s.url!));
             labels.push(s.resolution);
           });
           if (dashEntry) {
@@ -232,7 +242,7 @@ function WatchContent({ item }: { item: MediaItem }) {
             labels.push("HLS");
           }
           mp4s.forEach((s) => {
-            srcs.push(s.url);
+            srcs.push(proxyUrl(s.url!));
             labels.push(s.resolution);
           });
         }
