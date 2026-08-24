@@ -205,6 +205,12 @@ function WatchContent({ item }: { item: MediaItem }) {
           /hakunaymatata\.com/i.test(u)
             ? `/api/proxy/seg?u=${encodeURIComponent(u)}`
             : u;
+        // DASH/HLS manifests are fetched cross-origin by the browser's MSE
+        // engine, which fails under CORS even when the CDN returns 200. Proxy
+        // them too so every candidate is same-origin (segments get rewritten
+        // inside the manifest to the segment proxy).
+        const proxyDash = (u: string) => `/api/proxy/dash?u=${encodeURIComponent(u)}`;
+        const proxyHls = (u: string) => `/api/proxy/hls?u=${encodeURIComponent(u)}`;
         const isMp4 = (s: { url?: string; format?: string }) =>
           !!s.url && (/\.mp4(\?|$)/i.test(s.url) || s.format === "MP4");
         const mp4s = [...stream.sources]
@@ -221,7 +227,7 @@ function WatchContent({ item }: { item: MediaItem }) {
         // stays first (moviebox's native, highest-quality path).
         if (supportsNativeHls) {
           if (hlsUrl) {
-            srcs.push(hlsUrl);
+            srcs.push(proxyHls(hlsUrl));
             labels.push("HLS");
           }
           mp4s.forEach((s) => {
@@ -229,20 +235,20 @@ function WatchContent({ item }: { item: MediaItem }) {
             labels.push(s.resolution);
           });
           if (dashEntry) {
-            srcs.push(dashEntry.url);
+            srcs.push(proxyDash(dashEntry.url));
             labels.push(
               `DASH${dashEntry.resolutions ? ` · ${dashEntry.resolutions}` : ""}`,
             );
           }
         } else {
           if (dashEntry) {
-            srcs.push(dashEntry.url);
+            srcs.push(proxyDash(dashEntry.url));
             labels.push(
               `DASH${dashEntry.resolutions ? ` · ${dashEntry.resolutions}` : ""}`,
             );
           }
           if (hlsUrl) {
-            srcs.push(hlsUrl);
+            srcs.push(proxyHls(hlsUrl));
             labels.push("HLS");
           }
           mp4s.forEach((s) => {

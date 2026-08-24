@@ -876,6 +876,91 @@ async def proxy_seg(request: Request, u: str = Query(..., description="Absolute 
         )
 
 
+# ---------------------------------------------------------------- DASH PROXY
+# Same idea as the HLS proxy: the DASH manifest is fetched server-side (so the
+# per-host Referer is attached and CORS is a non-issue for the browser) and
+# rewritten so every segment / init / key URL — and the BaseURL used to resolve
+# relative template URLs — points back through our same-origin segment proxy.
+def _rewrite_dash(body: str, manifest_url: str) -> str:
+    m = re.search(r"<BaseURL>(.*?)</BaseURL>", body, re.IGNORECASE | re.DOTALL)
+    if m and m.group(1).strip():
+        cdn_base = m.group(1).strip()
+    else:
+        cdn_base = manifest_url.rsplit("/", 1)[0] + "/"
+    if not cdn_base.endswith("/"):
+        cdn_base += "/"
+
+    # Relative BaseURL that resolves against the manifest URL (which is our own
+    # /api/proxy/dash route) — so templated/relative segments land on /api/proxy/seg.
+    proxy_base = f"{_SEGMENT_PROXY_PATH}?u=" + urllib.parse.quote(cdn_base, safe="")
+
+    def _rewrite_url(u: str) -> str:
+        u = u.strip()
+        if not u or "$" in u:
+            return u  # templated URLs resolve against the (proxied) BaseURL
+        target = (
+            u if u.startswith(("http://", "https://")) else urllib.parse.urljoin(cdn_base, u)
+        )
+        return f"{_SEGMENT_PROXY_PATH}?u=" + urllib.parse.quote(target, safe="")
+
+    def _set_base(mm: re.Match) -> str:
+        return f"<BaseURL>{proxy_base}</BaseURL>"
+
+    if m:
+        body = re.sub(
+            r"<BaseURL>(.*?)</BaseURL>",
+            _set_base,
+            body,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+    else:
+        # No BaseURL present — inject one so relative templates resolve to the proxy.
+        body = re.sub(
+            r"(<MPD[^>]*>)",
+            lambda mm: f'{mm.group(1)}\n<BaseURL>{proxy_base}</BaseURL>',
+            body,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+
+    body = re.sub(r'media="([^"]+)"', lambda mm: f'media="{_rewrite_url(mm.group(1))}"', body)
+    body = re.sub(
+        r'initialization="([^"]+)"',
+        lambda mm: f'initialization="{_rewrite_url(mm.group(1))}"',
+        body,
+    )
+    body = re.sub(
+        r'<SegmentURL\s+media="([^"]+)"',
+        lambda mm: f'<SegmentURL media="{_rewrite_url(mm.group(1))}"',
+        body,
+    )
+    return body
+
+
+@app.get("/api/proxy/dash")
+async def proxy_dash(u: str = Query(..., description="Absolute DASH manifest URL")):
+    ref = _media_referer(u)
+    headers = {
+        "User-Agent": PLAYER_HEADERS["User-Agent"],
+        "Referer": ref,
+        "Origin": ref,
+        "Accept": "*/*",
+    }
+    async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
+        r = await client.get(u, headers=headers)
+        if r.status_code != 200:
+            raise HTTPException(status_code=r.status_code, detail="Upstream manifest error")
+        text = _rewrite_dash(r.text, u)
+    return Response(
+        content=text,
+        media_type="application/dash+xml",
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "no-store",
+        },
+    )
+
+
 # ---------------------------------------------------------------- SPA
 # Desktop/mono mode catch-all. Registered LAST so /api-ish JSON routes win.
 # Real files (assets/, sw.js, manifest.webmanifest) are served as-is;
