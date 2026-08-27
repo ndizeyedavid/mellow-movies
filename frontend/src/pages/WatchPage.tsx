@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   useParams,
   useNavigate,
@@ -167,6 +167,10 @@ function WatchContent({ item }: { item: MediaItem }) {
     captions: Array<{ lang: string; label: string; src: string }>;
   } | null>(null);
   const [recommendations, setRecommendations] = useState<MediaItem[]>([]);
+  // Bumped to re-fetch fresh stream URLs when a signed (proxied) source
+  // expires mid-playback; the player calls this and resumes from progress.
+  const [refreshTick, setRefreshTick] = useState(0);
+  const handleRefreshSources = useCallback(() => setRefreshTick((t) => t + 1), []);
 
   const isShow = item.type === "show" && (item.seasonMap?.length ?? 0) > 0;
   // Movies live under "season 0" in the moviebox catalog; TV shows use
@@ -193,8 +197,24 @@ function WatchContent({ item }: { item: MediaItem }) {
         // down the list if one candidate fails to start.
         const dashEntry = stream.dash.find((d) => d.url);
         const hlsUrl = stream.hls[0]?.url;
+        // The hakunaymatata CDN only serves media with the videodownloader.site
+        // Referer, which the browser can't set itself — so pipe those URLs
+        // through our same-origin proxy (it sets the Referer server-side).
+        // These are progressive H.264 MP4s that play on every device.
+        const proxyUrl = (u: string) =>
+          /hakunaymatata\.com/i.test(u)
+            ? `/api/proxy/seg?u=${encodeURIComponent(u)}`
+            : u;
+        // DASH/HLS manifests are fetched cross-origin by the browser's MSE
+        // engine, which fails under CORS even when the CDN returns 200. Proxy
+        // them too so every candidate is same-origin (segments get rewritten
+        // inside the manifest to the segment proxy).
+        const proxyDash = (u: string) => `/api/proxy/dash?u=${encodeURIComponent(u)}`;
+        const proxyHls = (u: string) => `/api/proxy/hls?u=${encodeURIComponent(u)}`;
+        const isMp4 = (s: { url?: string; format?: string }) =>
+          !!s.url && (/\.mp4(\?|$)/i.test(s.url) || s.format === "MP4");
         const mp4s = [...stream.sources]
-          .filter((s) => s.url)
+          .filter(isMp4)
           .sort(
             (a, b) =>
               (RES_PRIORITY[b.resolution.toUpperCase()] ?? 0) -
@@ -207,32 +227,32 @@ function WatchContent({ item }: { item: MediaItem }) {
         // stays first (moviebox's native, highest-quality path).
         if (supportsNativeHls) {
           if (hlsUrl) {
-            srcs.push(hlsUrl);
+            srcs.push(proxyHls(hlsUrl));
             labels.push("HLS");
           }
           mp4s.forEach((s) => {
-            srcs.push(s.url);
+            srcs.push(proxyUrl(s.url!));
             labels.push(s.resolution);
           });
           if (dashEntry) {
-            srcs.push(dashEntry.url);
+            srcs.push(proxyDash(dashEntry.url));
             labels.push(
               `DASH${dashEntry.resolutions ? ` · ${dashEntry.resolutions}` : ""}`,
             );
           }
         } else {
           if (dashEntry) {
-            srcs.push(dashEntry.url);
+            srcs.push(proxyDash(dashEntry.url));
             labels.push(
               `DASH${dashEntry.resolutions ? ` · ${dashEntry.resolutions}` : ""}`,
             );
           }
           if (hlsUrl) {
-            srcs.push(hlsUrl);
+            srcs.push(proxyHls(hlsUrl));
             labels.push("HLS");
           }
           mp4s.forEach((s) => {
-            srcs.push(s.url);
+            srcs.push(proxyUrl(s.url!));
             labels.push(s.resolution);
           });
         }
@@ -257,7 +277,7 @@ function WatchContent({ item }: { item: MediaItem }) {
       alive = false;
       blobUrls.forEach((u) => URL.revokeObjectURL(u));
     };
-  }, [item.subjectId, item.id, se, ep, playerKey]);
+  }, [item.subjectId, item.id, se, ep, playerKey, refreshTick]);
 
   // Derived stream state.
   const loadingStream = streamSnap?.key !== playerKey;
@@ -385,6 +405,7 @@ function WatchContent({ item }: { item: MediaItem }) {
       startAt={resumeAt}
       onProgress={handleProgress}
       onEnded={handleEnded}
+      onRefreshSources={handleRefreshSources}
     />
   );
 
