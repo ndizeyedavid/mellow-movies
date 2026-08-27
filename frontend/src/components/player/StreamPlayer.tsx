@@ -24,6 +24,7 @@ import PlayerControls, {
 } from "./PlayerControls";
 import { isTauri, onMediaKey, toggleMiniPlayer } from "../../desktopBridge";
 import { supportsNativeHls } from "../../utils/media";
+import { loadSubtitlePref, saveSubtitlePref } from "../../utils/subtitlePref";
 
 // Retry delays (ms) before retrying the same source. Transient CDN limits
 // (429/5xx) usually clear within a couple of seconds, so a bounded retry
@@ -162,6 +163,26 @@ export default function StreamPlayer({
       })),
     [subtitleTracks],
   );
+
+  /* ---------- Subtitle preference ---------- */
+  // Honour the language the user previously picked instead of defaulting to the
+  // first track (which is often Arabic). Runs when a new set of captions loads;
+  // once the user makes an in-session choice it's left alone.
+  useEffect(() => {
+    if (!subtitleTracks.length || activeSubtitle !== null) return;
+    const pref = loadSubtitlePref();
+    if (!pref || pref === "off") return;
+    const idx = subtitleTracks.findIndex(
+      (t) =>
+        t.lang.toLowerCase() === pref.toLowerCase() ||
+        t.lang.toLowerCase().startsWith(`${pref.toLowerCase()}-`),
+    );
+    if (idx < 0) return;
+    // Defer so we don't setState synchronously inside the effect (avoids a
+    // cascading render) — the selection still applies immediately on load.
+    const t = window.setTimeout(() => setActiveSubtitle(String(idx)), 0);
+    return () => window.clearTimeout(t);
+  }, [subtitleTracks, activeSubtitle]);
 
   /* ---------- Direct-file quality ---------- */
   // MP4 playback is a single file per resolution; build the quality menu
@@ -648,6 +669,11 @@ export default function StreamPlayer({
 
   const onSubtitleChange = (id: string | null) => {
     setActiveSubtitle(id);
+    // Remember the user's choice so it sticks across reloads/episodes. Store the
+    // language code (or "off" for no captions) rather than the track index, since
+    // the available languages differ per title.
+    const lang = id != null ? subtitleTracks[Number(id)]?.lang ?? null : "off";
+    saveSubtitlePref(lang);
     // Rendered as a single remounted <track> (see JSX): remounting the track
     // forces the browser to (re)load + show the chosen caption, which is the
     // only way to reliably switch external WebVTT tracks on iOS native HLS.
@@ -797,7 +823,7 @@ export default function StreamPlayer({
             React replace the element, which makes iOS native HLS load and show
             the picked language (toggling mode on pre-mounted tracks is flaky
             there). `default` hints the active one should display immediately. */}
-        {subtitleTracks[Number(activeSubtitle)] && (
+        {activeSubtitle != null && subtitleTracks[Number(activeSubtitle)] && (
           <track
             key={`cap-${activeSubtitle}`}
             kind="subtitles"
