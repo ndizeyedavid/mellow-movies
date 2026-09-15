@@ -85,18 +85,36 @@ def _parse_proxy_list(raw: str) -> list[str]:
 
 
 def _residential_proxy_list() -> list[str]:
-    """Return all configured proxy URLs (multi-entry). Checked keys:
-    RESIDENTIAL_PROXY, RESIDENTIAL_PROXY_URL, HTTP_PROXY, HTTPS_PROXY (and
-    lowercase variants). Comma / newline / semicolon separated lists are
-    supported, so you can paste many at once and they rotate automatically."""
+    """Return all configured proxy URLs in priority order.
+    Priority: HOME_PROXY_URL / HOME_TUNNEL_URL (your Cloudflare Tunnel) first,
+    then RESIDENTIAL_PROXY / HTTP_PROXY etc. (your 3 free webshares).
+    So when you're online your home residential IP is tried first; when
+    you're offline that entry 429/502s, is marked unhealthy for 5 min and
+    the backend transparently falls back to the free proxies — movies never stop.
+    All lists accept comma / newline / semicolon / space separators."""
+    # Home tunnel is top priority when you're online
+    home_keys = ("HOME_PROXY_URL", "HOME_TUNNEL_URL", "HOME_TUNNEL_PROXY", "PRIMARY_PROXY")
+    home_raw: list[str] = []
+    for _k in home_keys:
+        _v = os.getenv(_k)
+        if _v and _v.strip():
+            home_raw.append(_v.strip())
+    # Fallback pool (free webshares)
     raw_parts: list[str] = []
     for _k in ("RESIDENTIAL_PROXY", "RESIDENTIAL_PROXY_URL", "HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
         _v = os.getenv(_k)
         if _v and _v.strip():
             raw_parts.append(_v)
-    # Join all env vars then parse as one list (so mixing keys concatenates)
-    combined = ",".join(raw_parts)
-    return _parse_proxy_list(combined)
+    home_list = _parse_proxy_list(",".join(home_raw)) if home_raw else []
+    rest_list = _parse_proxy_list(",".join(raw_parts)) if raw_parts else []
+    # Home first (deduped, home wins), then rest in given order
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for u in home_list + rest_list:
+        if u not in seen:
+            seen.add(u)
+            ordered.append(u)
+    return ordered
 
 
 def _residential_proxy_pool() -> list[str]:
@@ -137,9 +155,9 @@ def _mark_proxy_failure(proxy: str | None) -> None:
 
 
 def _pick_healthy_proxy() -> str | None:
-    """Pick the next proxy that is not in cooldown. Returns None (direct)
-    if all proxies are in cooldown — caller may still succeed locally but
-    hosted will likely 426; caller should decide fallback."""
+    """Pick the next proxy that is not in cooldown. HOME_TUNNEL_URL is always
+    tried first (priority) when healthy; only then round-robin among fallbacks.
+    Returns None (direct) if all proxies are in cooldown."""
     lst = _residential_proxy_list()
     if not lst:
         return None
@@ -148,17 +166,28 @@ def _pick_healthy_proxy() -> str | None:
     for p, t in list(_proxy_failures.items()):
         if now - t > _proxy_cooldown:
             _proxy_failures.pop(p, None)
-    # Try each proxy once in round-robin order
+    # Home tunnel (index 0) has strict priority when you're online
+    home_keys = ("HOME_PROXY_URL", "HOME_TUNNEL_URL", "HOME_TUNNEL_PROXY", "PRIMARY_PROXY")
+    home_set = set()
+    for _k in home_keys:
+        _v = os.getenv(_k)
+        if _v:
+            home_set.update(_parse_proxy_list(_v))
+    if lst and lst[0] in home_set and lst[0] not in _proxy_failures:
+        return lst[0]
+    # Otherwise round-robin among healthy fallbacks
     for _ in range(len(lst)):
         cand = _next_residential_proxy()
         if cand is None:
             break
+        # Skip home if it was just tried and failed; try fallbacks
+        if cand in home_set and cand in _proxy_failures:
+            continue
         if cand not in _proxy_failures:
             return cand
     # All in cooldown — return the least-recently failed (soonest to recover)
     if _proxy_failures:
         oldest = min(_proxy_failures, key=lambda k: _proxy_failures[k])
-        # Only return it if we've waited at least half the cooldown; otherwise None
         if now - _proxy_failures[oldest] > _proxy_cooldown / 2:
             return oldest
     return None

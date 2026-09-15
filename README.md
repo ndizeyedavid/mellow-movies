@@ -82,7 +82,7 @@ movies/
 │   │   └── utils/             # captions (SRT→VTT), toast, subtitlePref
 │   ├── public/                # manifest, sw.js, icons, og-image, sitemap
 │   └── vercel.json
-├── scripts/                   # start-dev.ps1 / stop-dev.ps1
+├── scripts/                   # start-dev.ps1 / stop-dev.ps1 + start-home-proxy.ps1/.bat (home residential tunnel)
 ├── dev.bat                    # menu: start / stop / restart local
 ├── .logs/
 └── README.md
@@ -128,19 +128,27 @@ Other: `npm run build` / `preview` / `lint`, `python verify.py` (backend self-ch
 
 | Var | Where | Notes |
 |---|---|---|
-| `RESIDENTIAL_PROXY` | backend | `http://user:pass@host:port` (or `socks5://`). When set, `/api/proxy/*` egresses residential so `bcdn*` returns `206` not `426`. Supports `RESIDENTIAL_PROXY_URL` / `HTTP_PROXY` aliases. Read from `backend/.env`, root `.env`, or platform env. See free plan-B options below. |
+| `HOME_TUNNEL_URL` | backend | **Top priority** when you're online: `https://xxx.trycloudflare.com` from `scripts/start-home-proxy.ps1`. Your home residential egress — free, unlimited, `206`. When you close the tunnel it’s marked unhealthy for 5 min and backend auto-fails to `RESIDENTIAL_PROXY`. Aliases: `HOME_PROXY_URL`, `PRIMARY_PROXY`. |
+| `RESIDENTIAL_PROXY` | backend | Fallback pool (your 3 free Webshares) — `http://user:pass@host:port` comma/newline/semicolon separated. Multiple proxies round-robin transparently; on `407/429/502` the failed one is skipped for 5 min and the **same** bytes are retried via the next one — movies never stop. Supports `RESIDENTIAL_PROXY_URL` / `HTTP_PROXY` aliases. From `backend/.env`, root `.env`, or platform env. |
 | `GITHUB_REPORT_TOKEN` | backend | Fine-grained PAT with `issues: write` for `ndizeyedavid/mellow-movies` — lets `/api/report` open issues anonymously. Optional `GITHUB_REPORT_REPO` (default `ndizeyedavid/mellow-movies`) and `GITHUB_REPORT_LABELS` (`user-report,bug`). |
 | `NTFY_TOPIC` | backend | e.g. `mellow-movies-reports` — you subscribe in the ntfy.sh app to get phone pushes for each report. Optional `NTFY_SERVER` (default `https://ntfy.sh`). |
 | `VITE_API_BASE` | frontend | e.g. `https://mellow-movies.fastapicloud.dev` in production. Local: `http://localhost:8000` (or `/api` rewrite via `vercel.json`). |
 
-Create `backend/.env` (ignored by git) — never commit tokens:
+Create `backend/.env` (ignored by git) — never commit tokens. Home first, webshares fallback:
 
 ```
-RESIDENTIAL_PROXY=http://user:pass@host:port
+# Home (run scripts/start-home-proxy.ps1 while you want priority; close to fallback)
+HOME_TUNNEL_URL=https://abc-1234.trycloudflare.com
+
+# Fallback pool (3 free Webshares — paste all at once, any separator works)
+RESIDENTIAL_PROXY=http://user1:pass1@p1.webshare.io:port, http://user2:pass2@p2.webshare.io:port, http://user3:pass3@p3.webshare.io:port
+
 GITHUB_REPORT_TOKEN=github_pat_xxx
 GITHUB_REPORT_REPO=ndizeyedavid/mellow-movies
 NTFY_TOPIC=mellow-movies-reports
 ```
+
+**Home tunnel quick start:** double-click `scripts/start-home-proxy.bat` (or `powershell -File scripts/start-home-proxy.ps1`) while you want priority — keep the window open. It installs `proxy.py`, starts `127.0.0.1:8899` and `cloudflared tunnel --url http://localhost:8899`, prints the `https://xxx.trycloudflare.com` to paste as `HOME_TUNNEL_URL` on fastapicloud. Close the window to revert to webshares. `GET /health/proxy` shows pool, cooldown and a 1KB probe.
 
 ---
 
@@ -154,9 +162,9 @@ NTFY_TOPIC=mellow-movies-reports
 | `GET /detail/{slug}` | Metadata, seasons, cast |
 | `GET /api/stream/{id}?detail_path=&se=&ep=` | Streams proxified to `…/api/proxy/mp4?u=…` (and `/api/proxy/hls`) so the browser never sends a `localhost`/`vercel.app` Referer to the CDN. |
 | `GET /api/stream/{id}/captions` | Subtitles (SRT, converted to VTT client-side) |
-| `GET /api/proxy/hls?u=`, `/api/proxy/seg?u=`, `/api/proxy/mp4?u=` | Media proxy: `Referer: https://moviebox.ph/`, `Range` passthrough, optional residential proxy, long `read` timeout, streamed `206`. |
+| `GET /api/proxy/hls?u=`, `/api/proxy/seg?u=`, `/api/proxy/mp4?u=` | Media proxy: `Referer: https://moviebox.ph/`, `Range` passthrough, prioritized residential proxy pool (home tunnel → webshares, auto failover), long `read` timeout, streamed `206`. |
 | `POST /api/report` | Anonymous report → GitHub issue + ntfy. See body in `backend/api.py: ReportRequest`. |
-| `GET /health/proxy` | (future) probe the proxy 1KB HEAD to detect bandwidth exhaustion early. |
+| `GET /health/proxy` | Pool (masked), cooldowns and 1KB probe via healthy proxy — detects 426/429 / bandwidth exhaustion. |
 
 ---
 
