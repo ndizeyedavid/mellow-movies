@@ -998,6 +998,65 @@ async def proxy_mp4(request: Request, u: str = Query(..., description="Absolute 
     return await _proxy_stream(request, u, is_manifest=False)
 
 
+@app.get("/debug/cdn")
+async def debug_cdn(request: Request, u: str = Query("https://bcdnxw.hakunaymatata.com/bt/640ff12864b2bb75b1a394e60ecb4d3c.mp4?sign=86d9e77c99cdb7d0c70404565d66387e&t=1789455866")):
+    """Debug helper for hosted egress: try several header combos against the
+    given CDN url and return what each gets. Helps diagnose 426 on fastapicloud."""
+    ip = _client_ip(request)
+    results = {"client_ip": ip, "geo_headers": _geo_headers(ip), "tests": []}
+
+    # Common target - use provided u or default
+    test_cases = [
+        ("minimal", {"User-Agent": PLAYER_HEADERS["User-Agent"], "Referer": "https://moviebox.ph/", "Origin": "https://moviebox.ph", "Range": "bytes=0-1023"}),
+        ("minimal+geo", {"User-Agent": PLAYER_HEADERS["User-Agent"], "Referer": "https://moviebox.ph/", "Origin": "https://moviebox.ph", "Range": "bytes=0-1023", **_geo_headers(ip)}),
+        ("player_headers", {**PLAYER_HEADERS, "Referer": "https://moviebox.ph/", "Origin": "https://moviebox.ph", "Range": "bytes=0-1023", **_geo_headers(ip)}),
+        ("no_referer", {"User-Agent": PLAYER_HEADERS["User-Agent"], "Range": "bytes=0-1023", **_geo_headers(ip)}),
+        ("identity_encoding", {"User-Agent": PLAYER_HEADERS["User-Agent"], "Referer": "https://moviebox.ph/", "Origin": "https://moviebox.ph", "Range": "bytes=0-1023", "Accept-Encoding": "identity", **_geo_headers(ip)}),
+    ]
+    # Also test without Range (full)
+    test_cases.append(("full_no_range", {"User-Agent": PLAYER_HEADERS["User-Agent"], "Referer": "https://moviebox.ph/", "Origin": "https://moviebox.ph", **_geo_headers(ip)}))
+
+    async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
+        for name, hdrs in test_cases:
+            try:
+                # Ensure Accept-Encoding not compressed unless specified
+                if "Accept-Encoding" not in hdrs:
+                    hdrs["Accept-Encoding"] = "identity"
+                r = await client.get(u, headers=hdrs)
+                results["tests"].append({
+                    "name": name,
+                    "status": r.status_code,
+                    "content_type": r.headers.get("content-type"),
+                    "content_length": r.headers.get("content-length"),
+                    "content_range": r.headers.get("content-range"),
+                    "server": r.headers.get("server"),
+                    "body_snippet": r.text[:500] if r.headers.get("content-type","").startswith("text") else f"binary {len(r.content)}",
+                })
+            except Exception as e:
+                results["tests"].append({"name": name, "error": str(e)})
+
+    # Also test what _proxy_stream would do (minimal media headers)
+    try:
+        # Use the actual proxy logic but capture upstream status via direct call
+        from unittest.mock import MagicMock
+        # Just report what headers _proxy_stream would send
+        minimal_headers = {
+            "User-Agent": PLAYER_HEADERS["User-Agent"],
+            "Referer": "https://moviebox.ph/",
+            "Origin": "https://moviebox.ph",
+            "Accept": "*/*",
+            "Accept-Encoding": "identity",
+            "Connection": "keep-alive",
+            "Range": "bytes=0-1023",
+            **_geo_headers(ip),
+        }
+        results["proxy_would_send"] = minimal_headers
+    except Exception as e:
+        results["proxy_error"] = str(e)
+
+    return results
+
+
 # Allow HEAD for MP4 probing (some players / devtools issue HEAD first)
 @app.api_route(_MP4_PROXY_PATH, methods=["HEAD"])
 async def proxy_mp4_head(request: Request, u: str = Query(..., description="Absolute media file URL")):
