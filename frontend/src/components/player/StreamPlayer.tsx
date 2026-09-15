@@ -124,6 +124,17 @@ export default function StreamPlayer({
   const src = srcs[srcIndex] ?? "";
   const isDashSrc = /\.mpd(?:\?|$)/i.test(src);
   const isHlsSrc = /\.m3u8(?:\?|$)/i.test(src);
+  // Hosted (Vercel) can't use backend proxy for bcdn* (datacenter 426)
+  // and direct <video> sends Referer: vercel.app → 429. Fallback: fetch
+  // the mp4 directly with Referer: https://moviebox.ph/ from the user's
+  // residential IP and play via blob: (progressive, supports seeking).
+  const isHosted = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    const h = window.location.hostname;
+    return h.includes("vercel.app") || h.includes("fastapicloud") || h.includes("netlify");
+  }, []);
+  const isBcdnSrc = /hakunaymatata\.com|bcdn/.test(src);
+  const [blobSrc, setBlobSrc] = useState<string | null>(null);
 
   const [reloadKey, setReloadKey] = useState(0);
   const [paused, setPaused] = useState(true);
@@ -192,7 +203,7 @@ export default function StreamPlayer({
   const isFileSrc = !isDashSrc && !isHlsSrc;
   // Native HLS is used on Safari/iOS unless we've switched to the hls.js
   // fallback for this source (older iOS that rejects native playback).
-  const useNativeHls = isHlsSrc && supportsNativeHls && !useHlsFallback;
+  // effective* variant is used for blob: fallback.
   const fileEntries = useMemo(
     () =>
       srcs
@@ -233,10 +244,73 @@ export default function StreamPlayer({
     }
   }, [srcIndex, srcs.length]);
 
+  /* ---------- Hosted blob fallback (Vercel → bcdn* 429/426) ---------- */
+  // On hosted, direct <video src="https://bcdnxw..."> sends
+  // Referer: https://mellowmovies.vercel.app → 429. The SW tries to
+  // spoof Referer but still gets 429/CORS for some files. Fetch the mp4
+  // directly with Referer: https://moviebox.ph/ from the residential IP
+  // and play via blob: — bypasses both datacenter 426 and Vercel 429.
+  useEffect(() => {
+    if (!isHosted || !isBcdnSrc || isDashSrc || isHlsSrc) {
+      setBlobSrc(null);
+      return;
+    }
+    if (!src) return;
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    // Show buffering while we fetch the blob
+    setWaiting(true);
+    setError(false);
+    setMediaError(null);
+    const fetchBlob = async () => {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const r = await fetch(src, {
+            referrer: "https://moviebox.ph/",
+            referrerPolicy: "unsafe-url",
+            mode: "cors",
+            credentials: "omit",
+            cache: "no-store",
+          });
+          if (!r.ok) throw new Error(`${r.status}`);
+          const blob = await r.blob();
+          if (cancelled) return;
+          objectUrl = URL.createObjectURL(blob);
+          setBlobSrc(objectUrl);
+          setWaiting(false);
+          return;
+        } catch {
+          if (attempt < 2) await new Promise((res) => setTimeout(res, 800 * (attempt + 1)));
+        }
+      }
+      if (!cancelled) {
+        // Fallback to direct src — let SW or <video> handle it
+        setBlobSrc(null);
+        setWaiting(false);
+      }
+    };
+    fetchBlob();
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [src, isHosted, isBcdnSrc, isDashSrc, isHlsSrc]);
+
   /* ---------- Playback bootstrap (DASH, HLS or direct file) ---------- */
+  // Effective source: blob: on hosted bcdn* (fetched with correct Referer),
+  // otherwise the original src (proxied on local, direct on hosted via SW).
+  const effectiveSrc = blobSrc || src;
+  const effectiveIsDash = /\.mpd(?:\?|$)/i.test(effectiveSrc);
+  const effectiveIsHls = /\.m3u8(?:\?|$)/i.test(effectiveSrc);
+  const effectiveUseNativeHls = effectiveIsHls && supportsNativeHls && !useHlsFallback;
+
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !src) return;
+    if (!video || !effectiveSrc) return;
+    // If we're on hosted and still waiting for the blob, don't start
+    // the player with the raw bcdn URL (would 429). The blob effect
+    // above will set effectiveSrc once fetched.
+    if (isHosted && isBcdnSrc && !blobSrc && !isDashSrc && !isHlsSrc) return;
 
     setWaiting(true);
     setError(false);
@@ -280,7 +354,7 @@ export default function StreamPlayer({
       tryNextSource();
     };
 
-    if (isDashSrc && dashjs.supportsMediaSource()) {
+    if (effectiveIsDash && dashjs.supportsMediaSource()) {
       const dash = dashjs.MediaPlayer().create();
       dashRef.current = dash;
 
@@ -321,7 +395,7 @@ export default function StreamPlayer({
         setCurrentLevel(ev.newRepresentation?.index ?? -1);
       });
 
-      dash.initialize(video, src, false);
+      dash.initialize(video, effectiveSrc, false);
       dash.updateSettings({
         streaming: { buffer: { fastSwitchEnabled: true } },
       });
@@ -332,7 +406,7 @@ export default function StreamPlayer({
       };
     }
 
-    if (useNativeHls) {
+    if (effectiveUseNativeHls) {
       // Native HLS (Safari / iOS / iPadOS). Played by the browser itself —
       // no MSE, no hls.js. Crucially, do NOT set crossOrigin on the <video>
       // for this path: iOS treats "anonymous" as a strict CORS fetch for every
@@ -353,7 +427,7 @@ export default function StreamPlayer({
         }
         fail();
       };
-      video.src = src;
+      video.src = effectiveSrc;
       // Nudge old iOS Safari (iPhone X / iOS 16 and earlier) to actually begin
       // loading the manifest — assigning src alone is sometimes not enough there.
       video.load();
@@ -367,7 +441,7 @@ export default function StreamPlayer({
       };
     }
 
-    if (isHlsSrc && Hls.isSupported()) {
+    if (effectiveIsHls && Hls.isSupported()) {
       const hls = new Hls({ enableWorker: true });
       hlsRef.current = hls;
 
@@ -434,7 +508,7 @@ export default function StreamPlayer({
       };
     }
 
-    if (isHlsSrc && video.canPlayType("application/vnd.apple.mpegurl")) {
+    if (effectiveIsHls && video.canPlayType("application/vnd.apple.mpegurl")) {
       // Native HLS (Safari)
       const onMediaError = () => {
         const ve = video.error;
@@ -445,7 +519,7 @@ export default function StreamPlayer({
         );
         fail();
       };
-      video.src = src;
+      video.src = effectiveSrc;
       video.load();
       video.addEventListener("loadedmetadata", onMetadata);
       video.addEventListener("error", onMediaError);
@@ -469,7 +543,7 @@ export default function StreamPlayer({
       );
       fail();
     };
-    video.src = src;
+    video.src = effectiveSrc;
     video.load();
     video.addEventListener("loadedmetadata", onMetadata);
     video.addEventListener("error", onMediaError);
@@ -479,7 +553,7 @@ export default function StreamPlayer({
       video.removeAttribute("src");
       video.load();
     };
-  }, [src, srcs.length, srcIndex, reloadKey, isDashSrc, isHlsSrc, useNativeHls, useHlsFallback, tryNextSource]);
+  }, [effectiveSrc, srcs.length, srcIndex, reloadKey, effectiveIsDash, effectiveIsHls, effectiveUseNativeHls, useHlsFallback, tryNextSource, isHosted, isBcdnSrc, blobSrc]);
 
   /* ---------- Stall watchdog (stuck / rate-limited playback) ---------- */
   // Once playing, if the playhead doesn't advance within STALL_TIMEOUT the
@@ -826,7 +900,7 @@ export default function StreamPlayer({
         }}
         className="h-full w-full object-contain"
         playsInline
-        crossOrigin={isHlsSrc && !useNativeHls ? "anonymous" : undefined}
+        crossOrigin={effectiveIsHls && !effectiveUseNativeHls ? "anonymous" : undefined}
       >
         {/* Captions render as ONE remounted <track>. Keying by selection makes
             React replace the element, which makes iOS native HLS load and show
