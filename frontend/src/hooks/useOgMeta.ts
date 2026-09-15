@@ -1,10 +1,10 @@
 import { useEffect } from "react";
 
 const SITE = "https://mellowmovies.vercel.app";
+// Chat preview image: public/seo-image.png (your chosen image, served as 1200x630)
+const SITE_IMAGE = `${SITE}/seo-image.png`;
 const SITE_TITLE = "Mellow Movies — Stream Movies & Shows";
-const SITE_DESC =
-  "Free movies & shows, beautifully delivered. No login, no ads — just press play. ✦ Free to watch.";
-const SITE_IMAGE = `${SITE}/og-image.png`;
+const SITE_DESC = "Free movies & shows, beautifully delivered. No login, no ads — just press play. ✦ Free to watch.";
 
 interface OgOptions {
   title?: string;
