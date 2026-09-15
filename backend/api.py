@@ -1085,6 +1085,155 @@ async def _proxy_stream(request: Request, target_url: str, *, is_manifest: bool 
     )
 
 
+# ---------------------------------------------------------------- REPORTING
+# Anonymous user reports → GitHub issue (via PAT) + ntfy.sh push.
+# No user GitHub account needed. The server holds GITHUB_REPORT_TOKEN.
+
+from pydantic import BaseModel, Field
+
+class ReportRequest(BaseModel):
+    # What the user was watching
+    title: str | None = Field(default=None, max_length=300)
+    detail_path: str | None = Field(default=None, max_length=500)
+    subject_id: str | None = Field(default=None)
+    se: int | None = None
+    ep: int | None = None
+    # Playback failure context
+    url: str | None = Field(default=None, max_length=2000)  # page url or stream url
+    stream_url: str | None = Field(default=None, max_length=2000)
+    error: str | None = Field(default=None, max_length=1000)
+    media_error: str | None = Field(default=None, max_length=1000)
+    # Optional user message
+    message: str | None = Field(default=None, max_length=2000)
+    user_agent: str | None = Field(default=None, max_length=500)
+
+_report_last: dict[str, float] = {}
+_REPORT_COOLDOWN = 45.0  # seconds per IP
+_REPORT_DAILY_LIMIT = 30  # per IP per day (simple)
+
+
+def _report_rate_limited(ip: str) -> bool:
+    now = time.monotonic()
+    last = _report_last.get(ip, 0)
+    if now - last < _REPORT_COOLDOWN:
+        return True
+    _report_last[ip] = now
+    # naive daily cleanup
+    if len(_report_last) > 2000:
+        cutoff = now - 86400
+        for k, v in list(_report_last.items()):
+            if v < cutoff:
+                _report_last.pop(k, None)
+    return False
+
+
+@app.post("/api/report")
+async def create_report(body: ReportRequest, request: Request):
+    ip = _client_ip(request) or (request.client.host if request.client else "unknown")
+    if _report_rate_limited(ip):
+        raise HTTPException(status_code=429, detail="Too many reports, please wait a moment")
+
+    # Basic honeypot: empty message with no context is likely spam but allow
+    title = (body.title or "Unknown title").strip()[:120] or "Unknown title"
+    # Build markdown body for GitHub issue
+    ts = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
+    md_lines = [
+        f"**Reported at:** {ts}",
+        f"**IP:** `{ip}`",
+        f"**Page:** {body.url or '—'}",
+        f"**Watch:** {body.detail_path or '—'} (subjectId={body.subject_id or '—'} se={body.se} ep={body.ep})",
+        f"**Title:** {title}",
+        f"**Error:** {body.error or '—'}",
+        f"**MediaError:** {body.media_error or '—'}",
+        f"**Stream URL:** `{ (body.stream_url or '')[:600] }`",
+        f"**UserAgent:** {body.user_agent or request.headers.get('user-agent') or '—'}",
+        "",
+        "**User message:**",
+        body.message.strip() if body.message and body.message.strip() else "_No message_",
+        "",
+        "---",
+        "_Auto-created via /api/report (anonymous, no user GitHub account)_",
+    ]
+    md_body = "\n".join(md_lines)
+
+    # Fire ntfy.sh and GitHub in parallel (best-effort)
+    ntfy_topic = os.getenv("NTFY_TOPIC", "").strip()
+    ntfy_server = os.getenv("NTFY_SERVER", "https://ntfy.sh").strip().rstrip("/")
+    github_token = os.getenv("GITHUB_REPORT_TOKEN", "").strip() or os.getenv("GITHUB_TOKEN", "").strip()
+    github_repo = os.getenv("GITHUB_REPORT_REPO", "ndizeyedavid/mellow-movies").strip()
+    github_labels = [s.strip() for s in os.getenv("GITHUB_REPORT_LABELS", "user-report,bug").split(",") if s.strip()]
+
+    issue_url: str | None = None
+    ntfy_ok = False
+    gh_error: str | None = None
+    ntfy_error: str | None = None
+
+    async with httpx.AsyncClient(timeout=20) as client:
+        # ntfy.sh
+        if ntfy_topic:
+            try:
+                # ntfy supports Title, Priority, Tags headers
+                headers = {
+                    "Title": f"Report: {title}",
+                    "Priority": "high",
+                    "Tags": "film,warning",
+                    "Click": body.url or "",
+                }
+                # Short plain text for push notification
+                ntfy_msg = f"{title} | {body.error or body.media_error or 'playback failed'} | {body.detail_path or ''} | {body.message or ''}"[:350]
+                r = await client.post(
+                    f"{ntfy_server}/{ntfy_topic}",
+                    content=ntfy_msg.encode("utf-8"),
+                    headers=headers,
+                )
+                ntfy_ok = r.status_code in (200, 204)
+                if not ntfy_ok:
+                    ntfy_error = f"{r.status_code} {r.text[:300]}"
+            except Exception as e:
+                ntfy_error = str(e)[:500]
+
+        # GitHub issue
+        if github_token and github_repo:
+            # Deduplicate-ish: include rate-limit; GitHub itself will allow duplicates
+            issue_title = f"[report] {title} — {body.error or body.media_error or 'playback failed'}"[:180]
+            payload = {
+                "title": issue_title,
+                "body": md_body,
+                "labels": github_labels,
+            }
+            try:
+                r = await client.post(
+                    f"https://api.github.com/repos/{github_repo}/issues",
+                    json=payload,
+                    headers={
+                        "Authorization": f"Bearer {github_token}",
+                        "Accept": "application/vnd.github+json",
+                        "X-GitHub-Api-Version": "2022-11-28",
+                    },
+                )
+                if r.status_code in (200, 201):
+                    try:
+                        issue_url = r.json().get("html_url")
+                    except Exception:
+                        issue_url = None
+                else:
+                    gh_error = f"{r.status_code} {r.text[:800]}"
+            except Exception as e:
+                gh_error = str(e)[:800]
+        elif not github_token:
+            gh_error = "GITHUB_REPORT_TOKEN not configured"
+
+    # Always 200 to caller unless rate-limited; report is best-effort
+    return {
+        "ok": True,
+        "github_issue": issue_url,
+        "github_error": gh_error,
+        "ntfy_ok": ntfy_ok,
+        "ntfy_error": ntfy_error,
+        "message": "Thanks for the report. We'll look into it.",
+    }
+
+
 @app.get(_HLS_PROXY_PATH)
 async def proxy_hls(request: Request, u: str = Query(..., description="Absolute HLS manifest URL")):
     return await _proxy_stream(request, u, is_manifest=True)
