@@ -40,16 +40,127 @@ except ImportError:
 
 
 def _residential_proxy_url() -> str | None:
-    """Return the residential proxy URL if configured.
-    Supports: RESIDENTIAL_PROXY, RESIDENTIAL_PROXY_URL, HTTP_PROXY, HTTPS_PROXY.
-    Expected format: http://user:pass@host:port  (or socks5://)
-    When set and non-empty, media bytes are fetched through it so the CDN
-    sees a residential egress instead of the datacenter's (fastapicloud 129.x)
-    which is hard-blocked with 426 on bcdn* even with correct Referer/XFF."""
+    """Backward compat: return the first proxy URL (single-proxy callers)."""
+    lst = _residential_proxy_list()
+    return lst[0] if lst else None
+
+
+# --- Multi-proxy pool (user can paste many proxies separated by commas,
+#     newlines, or semicolons; they rotate automatically without restart) ---
+import itertools
+import threading as _threading
+
+_proxy_lock = _threading.Lock()
+_proxy_cycle: itertools.cycle | None = None
+_proxy_list_cache: list[str] = []
+_proxy_env_snapshot: str = ""
+
+
+def _parse_proxy_list(raw: str) -> list[str]:
+    """Split a raw env value into clean proxy URLs. Accepts commas, newlines,
+    semicolons, and whitespace as separators, strips quotes, skips empties."""
+    if not raw or not raw.strip():
+        return []
+    # Normalize separators to comma, then split
+    for sep in ("\n", "\r", ";"):
+        raw = raw.replace(sep, ",")
+    parts = [p.strip().strip('"').strip("'") for p in raw.split(",")]
+    # Also handle whitespace-separated lists without commas (space split)
+    out: list[str] = []
+    for p in parts:
+        if not p:
+            continue
+        for sub in p.split():
+            sub = sub.strip().strip('"').strip("'")
+            if sub:
+                out.append(sub)
+    # Deduplicate preserving order
+    seen: set[str] = set()
+    uniq: list[str] = []
+    for u in out:
+        if u not in seen:
+            seen.add(u)
+            uniq.append(u)
+    return uniq
+
+
+def _residential_proxy_list() -> list[str]:
+    """Return all configured proxy URLs (multi-entry). Checked keys:
+    RESIDENTIAL_PROXY, RESIDENTIAL_PROXY_URL, HTTP_PROXY, HTTPS_PROXY (and
+    lowercase variants). Comma / newline / semicolon separated lists are
+    supported, so you can paste many at once and they rotate automatically."""
+    raw_parts: list[str] = []
     for _k in ("RESIDENTIAL_PROXY", "RESIDENTIAL_PROXY_URL", "HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
         _v = os.getenv(_k)
         if _v and _v.strip():
-            return _v.strip()
+            raw_parts.append(_v)
+    # Join all env vars then parse as one list (so mixing keys concatenates)
+    combined = ",".join(raw_parts)
+    return _parse_proxy_list(combined)
+
+
+def _residential_proxy_pool() -> list[str]:
+    """Snapshot of current proxy pool (for health endpoint)."""
+    return _residential_proxy_list()
+
+
+def _next_residential_proxy() -> str | None:
+    """Round-robin picker. Hot-reloads if env changed (no restart needed).
+    Thread-safe, never blocks the event loop for long."""
+    lst = _residential_proxy_list()
+    if not lst:
+        return None
+    if len(lst) == 1:
+        return lst[0]
+    global _proxy_cycle, _proxy_list_cache, _proxy_env_snapshot
+    with _proxy_lock:
+        env_now = ",".join(lst)
+        if _proxy_cycle is None or _proxy_env_snapshot != env_now or _proxy_list_cache != lst:
+            _proxy_list_cache = lst
+            _proxy_env_snapshot = env_now
+            _proxy_cycle = itertools.cycle(lst)
+        assert _proxy_cycle is not None
+        return next(_proxy_cycle)
+
+
+# Proxy health tracking: 407/429/502 + connect errors mark a proxy as
+# temporarily unhealthy (cooldown 5 min) so the next request skips it
+# without the user having to touch env vars. Movies never stop — the
+# failing proxy is skipped transparently.
+_proxy_failures: dict[str, float] = {}
+_proxy_cooldown = 300.0  # seconds
+
+
+def _mark_proxy_failure(proxy: str | None) -> None:
+    if proxy:
+        _proxy_failures[proxy] = time.monotonic()
+
+
+def _pick_healthy_proxy() -> str | None:
+    """Pick the next proxy that is not in cooldown. Returns None (direct)
+    if all proxies are in cooldown — caller may still succeed locally but
+    hosted will likely 426; caller should decide fallback."""
+    lst = _residential_proxy_list()
+    if not lst:
+        return None
+    now = time.monotonic()
+    # Prune expired cooldowns
+    for p, t in list(_proxy_failures.items()):
+        if now - t > _proxy_cooldown:
+            _proxy_failures.pop(p, None)
+    # Try each proxy once in round-robin order
+    for _ in range(len(lst)):
+        cand = _next_residential_proxy()
+        if cand is None:
+            break
+        if cand not in _proxy_failures:
+            return cand
+    # All in cooldown — return the least-recently failed (soonest to recover)
+    if _proxy_failures:
+        oldest = min(_proxy_failures, key=lambda k: _proxy_failures[k])
+        # Only return it if we've waited at least half the cooldown; otherwise None
+        if now - _proxy_failures[oldest] > _proxy_cooldown / 2:
+            return oldest
     return None
 
 # Where the bundled frontend lives when running as the desktop/mono server.
@@ -958,10 +1069,10 @@ async def _proxy_stream(request: Request, target_url: str, *, is_manifest: bool 
     else:
         timeout_cfg = httpx.Timeout(10, read=300, write=60, pool=10)
     # Manifests and small text are buffered — safe to use a short-lived client.
-    # Use residential proxy if configured (same reason as media path).
+    # Use residential proxy if configured (round-robin, auto skip on failure).
     if is_manifest:
         _p_kwargs = {"follow_redirects": True, "timeout": timeout_cfg}
-        _p = _residential_proxy_url()
+        _p = _pick_healthy_proxy()
         if _p:
             _p_kwargs["proxy"] = _p
         async with httpx.AsyncClient(**_p_kwargs) as client:
@@ -982,7 +1093,7 @@ async def _proxy_stream(request: Request, target_url: str, *, is_manifest: bool 
     is_text = any(x in target_url.lower() for x in (".srt", ".vtt", ".smi"))
     if is_text and not range_hdr:
         _t_kwargs = {"follow_redirects": True, "timeout": timeout_cfg}
-        _t = _residential_proxy_url()
+        _t = _pick_healthy_proxy()
         if _t:
             _t_kwargs["proxy"] = _t
         async with httpx.AsyncClient(**_t_kwargs) as client:
@@ -1007,34 +1118,105 @@ async def _proxy_stream(request: Request, target_url: str, *, is_manifest: bool 
     # proxy (user's acquired proxy) instead of the datacenter — the bcdn*
     # WAF hard-blocks 129.x datacenter egress with 426 even when Referer/XFF
     # are correct, while residential egress returns 206 (verified locally).
-    _proxy = _residential_proxy_url()
-    _client_kwargs = {"follow_redirects": True, "timeout": timeout_cfg}
-    if _proxy:
-        _client_kwargs["proxy"] = _proxy
-    client = httpx.AsyncClient(**_client_kwargs)
-    try:
-        upstream = await client.send(
-            client.build_request("GET", target_url, headers=headers), stream=True
-        )
-    except Exception:
-        await client.aclose()
-        raise
-    status = upstream.status_code
-    # Hosted datacenter 426 fallback: if moviebox.ph Referer is blocked,
-    # retry once with mzfi.me (current player domain). Local 206 with
-    # moviebox.ph, hosted 426 with same — mzfi.me may succeed.
-    if status == 426 and headers.get("Referer") == "https://moviebox.ph/":
-        await upstream.aclose()
-        headers["Referer"] = "https://mzfi.me/"
-        headers["Origin"] = "https://mzfi.me"
+    # Try proxies in round-robin with automatic failover: if the chosen
+    # proxy is exhausted (407 Proxy Auth, 429 rate-limit, 502 bad gateway,
+    # or connect timeout), mark it unhealthy for 5 min and retry the SAME
+    # request via the next proxy transparently — movies never stop.
+    # The viewer never has to touch env vars; just paste many proxies once.
+    _proxy_candidates: list[str | None]  # None means direct (no proxy)
+    pool = _residential_proxy_list()
+    if pool:
+        # Build ordered candidates: pick healthy round-robin first, then others
+        first = _pick_healthy_proxy()
+        if first:
+            # rotate so first is head, then remaining in pool order
+            idx = pool.index(first) if first in pool else 0
+            _proxy_candidates = pool[idx:] + pool[:idx]
+        else:
+            _proxy_candidates = pool.copy()
+        # If all proxies in cooldown, still try direct as last resort
+        _proxy_candidates.append(None)
+    else:
+        _proxy_candidates = [None]
+
+    client: httpx.AsyncClient | None = None
+    upstream: httpx.Response | None = None  # type: ignore
+    last_exc: Exception | None = None
+    tried_proxies: list[str] = []
+
+    for _proxy in _proxy_candidates:
+        _client_kwargs = {"follow_redirects": True, "timeout": timeout_cfg}
+        if _proxy:
+            _client_kwargs["proxy"] = _proxy
+        # (re)create client for this attempt
+        if client is not None:
+            try:
+                await client.aclose()
+            except Exception:
+                pass
+        client = httpx.AsyncClient(**_client_kwargs)
+        tried_proxies.append(_proxy or "direct")
         try:
             upstream = await client.send(
                 client.build_request("GET", target_url, headers=headers), stream=True
             )
-            status = upstream.status_code
-        except Exception:
-            await client.aclose()
-            raise
+        except Exception as e:
+            last_exc = e
+            # Proxy connect/auth failures → mark and try next proxy
+            _mark_proxy_failure(_proxy)
+            # Don't retry direct if it's already the last candidate without proxy
+            if _proxy is None:
+                await client.aclose()
+                raise
+            continue
+        status = upstream.status_code
+        # Hosted datacenter 426 fallback: if moviebox.ph Referer is blocked,
+        # retry once with mzfi.me (current player domain). Local 206 with
+        # moviebox.ph, hosted 426 with same — mzfi.me may succeed.
+        if status == 426 and headers.get("Referer") == "https://moviebox.ph/":
+            await upstream.aclose()
+            headers["Referer"] = "https://mzfi.me/"
+            headers["Origin"] = "https://mzfi.me"
+            try:
+                upstream = await client.send(
+                    client.build_request("GET", target_url, headers=headers), stream=True
+                )
+                status = upstream.status_code
+            except Exception as e:
+                last_exc = e
+                _mark_proxy_failure(_proxy)
+                continue
+        # Proxy exhausted / rate-limited → mark and try next proxy silently
+        if status in (407, 429, 502, 503, 504) and _proxy is not None:
+            # Buffer tiny error body to avoid leaking, then mark and retry
+            try:
+                await upstream.aread()
+            except Exception:
+                pass
+            try:
+                await upstream.aclose()
+            except Exception:
+                pass
+            _mark_proxy_failure(_proxy)
+            # If there are more proxies to try, continue loop
+            if _proxy != _proxy_candidates[-1] or len(_proxy_candidates) > 1:
+                # Don't close client yet — next iteration will recreate; close current
+                try:
+                    await client.aclose()
+                    client = None
+                except Exception:
+                    pass
+                continue
+        # Success or non-proxy error — keep this upstream/client for the caller
+        break
+    else:
+        # No candidate succeeded
+        if last_exc:
+            raise last_exc
+        raise HTTPException(status_code=502, detail=f"All proxies failed (tried {tried_proxies})")
+
+    assert client is not None and upstream is not None
+    status = upstream.status_code
     # Non-200/206 from CDN (e.g. 429, 403) should surface as-is so the
     # player can failover; the caller decides retry vs next source.
     # For errors we can close immediately and return the error body buffered.
@@ -1125,6 +1307,62 @@ def _report_rate_limited(ip: str) -> bool:
             if v < cutoff:
                 _report_last.pop(k, None)
     return False
+
+
+@app.get("/health/proxy")
+async def health_proxy():
+    """Health: which proxies are configured, which are in cooldown, and a
+    1KB probe via the current healthy proxy. No secrets leaked (host only)."""
+    pool = _residential_proxy_pool()
+    now = time.monotonic()
+
+    def _mask(u: str) -> str:
+        try:
+            from urllib.parse import urlparse
+
+            p = urlparse(u)
+            host = p.hostname or "?"
+            return f"{p.scheme}://***@{host}:{p.port or ''}".rstrip(":")
+        except Exception:
+            return "***"
+
+    proxies = []
+    for p in pool:
+        remaining = 0
+        if p in _proxy_failures:
+            remaining = max(0, int(_proxy_cooldown - (now - _proxy_failures[p])))
+        proxies.append({"proxy": _mask(p), "cooldown_remaining_s": remaining, "healthy": remaining == 0})
+
+    probe: dict = {"attempted": False}
+    # Try a tiny range probe via the current healthy proxy
+    probe_url = "https://bcdnxw.hakunaymatata.com/bt/640ff12864b2bb75b1a394e60ecb4d3c.mp4?sign=86d9e77c99cdb7d0c70404565d66387e&t=1789455866"
+    # Use the next healthy proxy if any; otherwise direct (will be 426)
+    chosen = _pick_healthy_proxy()
+    kwargs: dict = {"follow_redirects": True, "timeout": httpx.Timeout(10, read=15)}
+    if chosen:
+        kwargs["proxy"] = chosen
+    try:
+        probe["attempted"] = True
+        probe["proxy"] = _mask(chosen) if chosen else "direct"
+        async with httpx.AsyncClient(**kwargs) as client:
+            r = await client.get(
+                probe_url,
+                headers={
+                    "User-Agent": PLAYER_HEADERS["User-Agent"],
+                    "Referer": "https://moviebox.ph/",
+                    "Origin": "https://moviebox.ph",
+                    "Range": "bytes=0-1023",
+                },
+            )
+            probe["status"] = r.status_code
+            probe["content_type"] = r.headers.get("content-type")
+            probe["content_range"] = r.headers.get("content-range")
+            probe["ok"] = r.status_code in (200, 206)
+    except Exception as e:
+        probe["error"] = str(e)[:500]
+        probe["ok"] = False
+
+    return {"pool_size": len(pool), "proxies": proxies, "probe": probe}
 
 
 @app.post("/api/report")
