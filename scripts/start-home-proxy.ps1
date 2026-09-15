@@ -45,14 +45,19 @@ if (-not $NoInstall) {
 
 # 2. Ensure cloudflared
 Write-Host "[2/3] Checking cloudflared..." -ForegroundColor Yellow
-if (-not (Test-Command cloudflared)) {
-  Write-Host "      cloudflared not found. Install:" -ForegroundColor Red
-  Write-Host "      winget install --id Cloudflare.cloudflared" -ForegroundColor White
-  Write-Host "      or download from https://github.com/cloudflare/cloudflared/releases" -ForegroundColor White
-  Write-Host "`n      After install, restart this script." -ForegroundColor Yellow
-  exit 1
+$cfBin = (Get-Command cloudflared -ErrorAction SilentlyContinue)?.Source
+if (-not $cfBin) {
+  $cfBin = "C:\Program Files (x86)\cloudflared\cloudflared.exe"
+  if (-not (Test-Path $cfBin)) {
+    Write-Host "      cloudflared not found. Install:" -ForegroundColor Red
+    Write-Host "      winget install --id Cloudflare.cloudflared" -ForegroundColor White
+    Write-Host "      or download from https://github.com/cloudflare/cloudflared/releases" -ForegroundColor White
+    Write-Host "`n      After install, restart this script." -ForegroundColor Yellow
+    exit 1
+  }
 }
-Write-Host "      cloudflared found: $(cloudflared --version 2>&1 | Select-Object -First 1)" -ForegroundColor Green
+function Invoke-Cf($args) { & $cfBin @args 2>&1 }
+Write-Host "      cloudflared found: $(Invoke-Cf @('--version') | Select-Object -First 1) ($cfBin)" -ForegroundColor Green
 
 # 3. Start local forward proxy in background
 Write-Host "[3/3] Starting local forward proxy on :$Port ..." -ForegroundColor Yellow
@@ -81,7 +86,7 @@ Write-Host "  Health: https://mellow-movies.fastapicloud.dev/health/proxy`n" -Fo
 # Stream tunnel output so user sees the URL
 try {
   # cloudflared logs the URL to stderr; capture and print
-  & cloudflared tunnel --url "http://localhost:$Port" --no-autoupdate 2>&1 | ForEach-Object { Write-Host $_ }
+  Invoke-Cf @("tunnel","--url","http://localhost:$Port","--no-autoupdate") | ForEach-Object { Write-Host $_ }
 } finally {
   Write-Host "`nTunnel closed. Stopping local proxy..." -ForegroundColor Yellow
   Stop-Job $proxyJob -ErrorAction SilentlyContinue | Out-Null
