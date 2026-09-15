@@ -194,13 +194,22 @@ function WatchContent({ item }: { item: MediaItem }) {
         // down the list if one candidate fails to start.
         const dashEntry = stream.dash.find((d) => d.url);
         const hlsUrl = stream.hls[0]?.url;
+        // Hosted (Vercel) blob fallback downloads the WHOLE file via a single
+        // fetch, so srcs[0] must be the smallest (360p ~180MB), not 1080p
+        // (~633MB) — faster, less RAM, minimal 429 risk. Local proxy streams
+        // progressively via Range so largest-first is fine there.
+        const hosted =
+          typeof window !== "undefined" &&
+          (window.location.hostname.includes("vercel.app") ||
+            window.location.hostname.includes("fastapicloud") ||
+            window.location.hostname.includes("netlify"));
         const mp4s = [...stream.sources]
           .filter((s) => s.url)
-          .sort(
-            (a, b) =>
-              (RES_PRIORITY[b.resolution.toUpperCase()] ?? 0) -
-              (RES_PRIORITY[a.resolution.toUpperCase()] ?? 0),
-          );
+          .sort((a, b) => {
+            const pa = RES_PRIORITY[a.resolution.toUpperCase()] ?? 0;
+            const pb = RES_PRIORITY[b.resolution.toUpperCase()] ?? 0;
+            return hosted ? pa - pb : pb - pa;
+          });
         const srcs: string[] = [];
         const labels: string[] = [];
         // All CDN urls are proxied through the backend so the browser's

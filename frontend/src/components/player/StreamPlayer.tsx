@@ -246,13 +246,19 @@ export default function StreamPlayer({
 
   /* ---------- Hosted blob fallback (Vercel → bcdn* 429/426) ---------- */
   // On hosted, direct <video src="https://bcdnxw..."> sends
-  // Referer: https://mellowmovies.vercel.app → 429. The SW tries to
-  // spoof Referer but still gets 429/CORS for some files. Fetch the mp4
-  // directly with Referer: https://moviebox.ph/ from the residential IP
-  // and play via blob: — bypasses both datacenter 426 and Vercel 429.
+  // Referer: vercel.app → 429, and backend proxy egress is datacenter → 426.
+  // Fetch the mp4 directly with Referer: https://moviebox.ph/ from the
+  // user's residential IP and play via blob:. The SW (mellow-v5+) deliberately
+  // ignores JS fetch (destination "") so this is a SINGLE request to the CDN
+  // — no double-fetch, no parallel Ranges, minimal 429 risk. Real download
+  // progress is reported via setWaiting + buffered so the UI doesn't sit at
+  // a fake 91%. WatchPage orders hosted mp4s smallest-first so srcs[0] is
+  // 360p (~180MB) not 1080p (~633MB).
+  const [blobProgress, setBlobProgress] = useState<number | null>(null);
   useEffect(() => {
     if (!isHosted || !isBcdnSrc || isDashSrc || isHlsSrc) {
       setBlobSrc(null);
+      setBlobProgress(null);
       return;
     }
     if (!src) return;
@@ -262,6 +268,7 @@ export default function StreamPlayer({
     setWaiting(true);
     setError(false);
     setMediaError(null);
+    setBlobProgress(0);
     const fetchBlob = async () => {
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
@@ -272,20 +279,56 @@ export default function StreamPlayer({
             credentials: "omit",
             cache: "no-store",
           });
-          if (!r.ok) throw new Error(`${r.status}`);
+          if (!r.ok) {
+            // Surface real status (429/403) so the error screen isn't generic.
+            // 429 without ACAO throws a CORS TypeError instead — caught below.
+            throw new Error(`cdn ${r.status}`);
+          }
+          const total = Number(r.headers.get("content-length") || 0);
+          // Stream with progress so large files don't look stuck.
+          if (r.body && typeof total === "number" && total > 0) {
+            const reader = r.body.getReader();
+            const chunks: BlobPart[] = [];
+            let received = 0;
+            for (;;) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              if (cancelled) {
+                reader.cancel().catch(() => {});
+                return;
+              }
+              chunks.push(value);
+              received += value.length;
+              setBlobProgress(Math.min(99, Math.round((received / total) * 100)));
+            }
+            const blob = new Blob(chunks, { type: r.headers.get("content-type") || "video/mp4" });
+            if (cancelled) return;
+            objectUrl = URL.createObjectURL(blob);
+            setBlobProgress(100);
+            setBlobSrc(objectUrl);
+            setWaiting(false);
+            return;
+          }
           const blob = await r.blob();
           if (cancelled) return;
           objectUrl = URL.createObjectURL(blob);
+          setBlobProgress(100);
           setBlobSrc(objectUrl);
           setWaiting(false);
           return;
-        } catch {
-          if (attempt < 2) await new Promise((res) => setTimeout(res, 800 * (attempt + 1)));
+        } catch (e) {
+          // CORS-blocked 429 lands here as TypeError (no ACAO on 429 HTML).
+          // Back off exponentially: 1s, 2s. After 3 fails, fall back to
+          // direct src so the SW (video destination) gets one last chance.
+          const msg = e instanceof Error ? e.message : String(e);
+          setMediaError(`blob fetch failed (${msg}), retry ${attempt + 1}/3`);
+          if (attempt < 2) await new Promise((res) => setTimeout(res, 1000 * (attempt + 1)));
         }
       }
       if (!cancelled) {
         // Fallback to direct src — let SW or <video> handle it
         setBlobSrc(null);
+        setBlobProgress(null);
         setWaiting(false);
       }
     };
@@ -937,11 +980,15 @@ export default function StreamPlayer({
         </button>
       )}
 
-      {/* Buffering indicator — circular progress with a fake percentage so
-          the user always sees something happening while the stream loads.
-          Shown from the very start (even before first play) so the
-          source-finding phase never looks frozen. */}
-      {waiting && !error && <BufferingIndicator />}
+      {/* Buffering indicator — real blob download % on hosted, fake
+          animation otherwise. The fake one caps at 92 which looked "stuck"
+          on large downloads; real progress fixes that. */}
+      {waiting && !error && (
+        <BufferingIndicator
+          progress={blobProgress}
+          label={blobProgress != null ? "Downloading" : "Loading"}
+        />
+      )}
 
       {/* Double-tap seek flash feedback */}
       {seekFlash && (

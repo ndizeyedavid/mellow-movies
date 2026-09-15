@@ -3,6 +3,9 @@ import { useEffect, useState } from "react";
 interface BufferingIndicatorProps {
   /** Label shown under the ring. */
   label?: string;
+  /** Real download progress 0-100. When provided, replaces the fake
+   *  animation (which caps at 92 and looks "stuck" on large blob downloads). */
+  progress?: number | null;
 }
 
 const RADIUS = 40;
@@ -17,17 +20,22 @@ const FAKE_MAX = 92;
  */
 export default function BufferingIndicator({
   label = "Loading",
+  progress: realProgress = null,
 }: BufferingIndicatorProps) {
-  const [progress, setProgress] = useState(4);
+  const [fake, setFake] = useState(4);
 
   useEffect(() => {
+    if (realProgress != null) return; // real progress drives the ring
     const id = window.setInterval(() => {
-      setProgress((p) => p + (FAKE_MAX - p) * 0.055);
+      setFake((p) => p + (FAKE_MAX - p) * 0.055);
     }, 70);
     return () => window.clearInterval(id);
-  }, []);
+  }, [realProgress]);
 
-  const shown = Math.min(99, Math.floor(progress));
+  const shown =
+    realProgress != null
+      ? Math.min(99, Math.max(0, Math.round(realProgress)))
+      : Math.min(99, Math.floor(fake));
 
   return (
     <div
