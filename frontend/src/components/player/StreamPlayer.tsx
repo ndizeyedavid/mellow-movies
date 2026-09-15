@@ -270,7 +270,12 @@ export default function StreamPlayer({
     setMediaError(null);
     setBlobProgress(0);
     const fetchBlob = async () => {
-      for (let attempt = 0; attempt < 3; attempt++) {
+      // Two attempts per quality (initial + one retry after 2s). Hammering
+      // more just deepens a 429 ban. On final failure, advance to the NEXT
+      // quality (different file/sign, likely not banned) instead of falling
+      // back to direct <video> for the same banned URL (which 429s again
+      // and surfaces as generic error code 4).
+      for (let attempt = 0; attempt < 2; attempt++) {
         try {
           const r = await fetch(src, {
             referrer: "https://moviebox.ph/",
@@ -318,17 +323,26 @@ export default function StreamPlayer({
           return;
         } catch (e) {
           // CORS-blocked 429 lands here as TypeError (no ACAO on 429 HTML).
-          // Back off exponentially: 1s, 2s. After 3 fails, fall back to
-          // direct src so the SW (video destination) gets one last chance.
+          // Firefox: "NetworkError when attempting to fetch resource."
           const msg = e instanceof Error ? e.message : String(e);
-          setMediaError(`blob fetch failed (${msg}), retry ${attempt + 1}/3`);
-          if (attempt < 2) await new Promise((res) => setTimeout(res, 1000 * (attempt + 1)));
+          setMediaError(`blob fetch failed (${msg}), retry ${attempt + 1}/2`);
+          if (attempt < 1) await new Promise((res) => setTimeout(res, 2000));
         }
       }
-      if (!cancelled) {
-        // Fallback to direct src — let SW or <video> handle it
+      if (cancelled) return;
+      // Same URL failed twice — it's expired or this IP is banned for this
+      // file. Move to the next quality (different file/sign) rather than
+      // retrying the same banned URL via direct <video> (instant 429).
+      retryCountRef.current = 0;
+      setUseHlsFallback(false);
+      lastProgressRef.current = Date.now();
+      if (srcIndex + 1 < srcs.length) {
+        setBlobProgress(null);
+        setSrcIndex((i) => i + 1);
+      } else {
         setBlobSrc(null);
         setBlobProgress(null);
+        setError(true);
         setWaiting(false);
       }
     };
@@ -337,7 +351,8 @@ export default function StreamPlayer({
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [src, isHosted, isBcdnSrc, isDashSrc, isHlsSrc]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [src, isHosted, isBcdnSrc, isDashSrc, isHlsSrc, srcIndex, srcs.length]);
 
   /* ---------- Playback bootstrap (DASH, HLS or direct file) ---------- */
   // Effective source: blob: on hosted bcdn* (fetched with correct Referer),
