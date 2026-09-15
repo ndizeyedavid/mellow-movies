@@ -2,7 +2,7 @@
    API (localhost:8000) and CDN stream requests are left to the network:
    they're cross-origin and stream URLs expire, so never cache them. */
 
-const CACHE = "mellow-v2";
+const CACHE = "mellow-v3";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -37,16 +37,38 @@ self.addEventListener("fetch", (event) => {
     url.hostname.endsWith("b-cdn.net") ||
     url.hostname.startsWith("bcdn");
   if (isStreamHost) {
+    // Don't forward the original Referer/Origin — let the `referrer`
+    // option set it to moviebox.ph. Forward only Range/Accept.
+    const headers = new Headers();
+    if (request.headers.has("Range")) headers.set("Range", request.headers.get("Range"));
+    if (request.headers.has("Accept")) headers.set("Accept", request.headers.get("Accept"));
+    // Some CDNs also check User-Agent, but the browser sets it automatically.
     event.respondWith(
       fetch(request.url, {
         method: "GET",
-        headers: request.headers,
+        headers,
         referrer: "https://moviebox.ph/",
-        referrerPolicy: "strict-origin-when-cross-origin",
+        referrerPolicy: "unsafe-url",
         mode: "cors",
         credentials: "omit",
         redirect: "follow",
-      }).catch(() => fetch(request)),
+      })
+        .then((r) => {
+          // If CDN still rate-limits (429), retry once without Range
+          // coalescing — some edges 429 on too many parallel Ranges.
+          if (r.status === 429) {
+            return new Promise((res) => setTimeout(() => res(fetch(request.url, {
+              method: "GET",
+              headers,
+              referrer: "https://moviebox.ph/",
+              referrerPolicy: "unsafe-url",
+              mode: "cors",
+              credentials: "omit",
+            })), 800));
+          }
+          return r;
+        })
+        .catch(() => fetch(request)),
     );
     return;
   }
