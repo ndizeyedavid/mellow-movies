@@ -124,16 +124,17 @@ export default function StreamPlayer({
   const src = srcs[srcIndex] ?? "";
   const isDashSrc = /\.mpd(?:\?|$)/i.test(src);
   const isHlsSrc = /\.m3u8(?:\?|$)/i.test(src);
-  // Hosted (Vercel) can't use backend proxy for bcdn* (datacenter 426)
-  // and direct <video> sends Referer: vercel.app → 429. Fallback: fetch
-  // the mp4 directly with Referer: https://moviebox.ph/ from the user's
-  // residential IP and play via blob: (progressive, supports seeking).
+  // Hosted now proxies like local per user request (all srcs are
+  // https://mellow-movies.fastapicloud.dev/api/proxy/mp4?u=...), so the
+  // previous direct-bcdn blob hack is disabled. isHosted kept for
+  // diagnostics; isBcdnSrc only matches DIRECT bcdn (not proxied) so
+  // blob is not used for proxied URLs.
   const isHosted = useMemo(() => {
     if (typeof window === "undefined") return false;
     const h = window.location.hostname;
     return h.includes("vercel.app") || h.includes("fastapicloud") || h.includes("netlify");
   }, []);
-  const isBcdnSrc = /hakunaymatata\.com|bcdn/.test(src);
+  const isBcdnSrc = !src.includes("/api/proxy/") && /hakunaymatata\.com|bcdn/.test(src);
   const [blobSrc, setBlobSrc] = useState<string | null>(null);
 
   const [reloadKey, setReloadKey] = useState(0);

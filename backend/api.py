@@ -787,33 +787,28 @@ def _should_proxy(url: str | None) -> bool:
 
 def _is_hosted_request(request: Request) -> bool:
     """Detect if this request is served from a hosted datacenter (fastapicloud,
-    onrender, vercel, etc.) vs local dev. On hosted, the bcdn* media egress
-    is datacenter and returns 426 even with correct Referer (verified via
-    hosted probing: all header combos 426 from 129.x egress, 206 locally).
-    The player blob fallback instead fetches the bcdn* URL directly
-    from the user's residential IP with Referer: https://moviebox.ph/."""
+    onrender, vercel, etc.) vs local dev. Kept for diagnostics only — as of
+    user request, hosted now ALSO proxies via /api/proxy/mp4 like local
+    (see _proxify_streams). The previous bypass (direct bcdn* + blob) is
+    disabled so Network shows localhost:8000-style proxy URLs on hosted too."""
     host = (request.headers.get("host") or str(request.base_url) or "").lower()
-    # Hosted platform domains
     if any(d in host for d in ("fastapicloud", "onrender.com", "vercel", "netlify", "railway")):
         return True
-    # Local dev hosts
     if "localhost" in host or "127.0.0.1" in host or host.startswith("192.168.") or host.startswith("10."):
         return False
-    # Fallback: if client IP is private, it's local; if public datacenter, treat as hosted
-    # For safety, assume non-local is hosted so we don't proxify and hit 426.
     return True
 
 
 def _proxify_streams(request: Request, streams: list[dict], hls: list[dict], dash: list[dict]):
-    """Rewrite every CDN media url in-place to go through the backend proxy
-    with the correct Referer + forwarded IP. On hosted datacenter we skip
-    proxifying — the egress is blocked with 426 and the player blob fallback
-    fetches the direct bcdn* URL with the correct Referer from the user's
-    residential IP instead. Mutates the passed lists."""
-    # On hosted, skip mp4 proxifying; keep HLS proxied (small segments) or
-    # let SW handle all. For now, skip all proxifying on hosted.
-    if _is_hosted_request(request):
-        return streams, hls, dash
+    """Rewrite every CDN media url to go through the backend proxy
+    (http://host/api/proxy/mp4?u=... and /hls). As requested, hosted now
+    behaves exactly like local — no direct hakunaymatata URLs in the
+    Network tab. Note: fastapicloud datacenter egress may still return
+    426 on bcdn* (vs 206 locally); if so the player will surface the
+    proxy's 426 and try the next quality. Mutates the passed lists."""
+    # User explicitly asked for hosted to use the proxy like local, even
+    # though fastapicloud egress was previously 426-blocked.
+    # _is_hosted_request is kept for logging but no longer gates proxifying.
     for s in streams:
         u = s.get("url")
         if _should_proxy(u):
@@ -885,9 +880,13 @@ async def _proxy_stream(request: Request, target_url: str, *, is_manifest: bool 
             "Accept": "*/*",
         }
     else:
+        # For hosted datacenter 426 fallback, try alternative Referers.
+        # Local 206 with moviebox.ph, hosted 426 with same — try mzfi.me
+        # (current player domain from /media-player/get-domain).
         base_headers = {
             "User-Agent": PLAYER_HEADERS["User-Agent"],
-            **_geo_headers(ip),
+            # Don't forward datacenter XFF for media — CDN checks TCP IP,
+            # not XFF, and XFF with datacenter IP may trigger WAF 426.
             "Referer": "https://moviebox.ph/",
             "Origin": "https://moviebox.ph",
             "Accept": "*/*",
@@ -959,6 +958,21 @@ async def _proxy_stream(request: Request, target_url: str, *, is_manifest: bool 
         await client.aclose()
         raise
     status = upstream.status_code
+    # Hosted datacenter 426 fallback: if moviebox.ph Referer is blocked,
+    # retry once with mzfi.me (current player domain). Local 206 with
+    # moviebox.ph, hosted 426 with same — mzfi.me may succeed.
+    if status == 426 and headers.get("Referer") == "https://moviebox.ph/":
+        await upstream.aclose()
+        headers["Referer"] = "https://mzfi.me/"
+        headers["Origin"] = "https://mzfi.me"
+        try:
+            upstream = await client.send(
+                client.build_request("GET", target_url, headers=headers), stream=True
+            )
+            status = upstream.status_code
+        except Exception:
+            await client.aclose()
+            raise
     # Non-200/206 from CDN (e.g. 429, 403) should surface as-is so the
     # player can failover; the caller decides retry vs next source.
     # For errors we can close immediately and return the error body buffered.
