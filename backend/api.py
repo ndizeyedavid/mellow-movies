@@ -1,5 +1,6 @@
 import re
 import json
+import os
 import sys
 import time
 import httpx
@@ -9,6 +10,47 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, FileResponse, Response, StreamingResponse
+
+# Load .env if present (local dev uses backend/.env or root .env).
+# Hosted platforms already inject env vars, so this is a no-op there.
+try:
+    from dotenv import load_dotenv  # type: ignore
+
+    # Try backend/.env then root .env; override=False so real env wins on hosted.
+    _env_paths = [Path(__file__).with_name(".env"), Path(__file__).resolve().parent.parent / ".env"]
+    for _p in _env_paths:
+        if _p.is_file():
+            load_dotenv(dotenv_path=_p, override=False)
+except ImportError:
+    # Minimal fallback when python-dotenv is not installed: parse .env manually.
+    for _p in [Path(__file__).with_name(".env"), Path(__file__).resolve().parent.parent / ".env"]:
+        if _p.is_file():
+            try:
+                for _line in _p.read_text(encoding="utf-8").splitlines():
+                    _line = _line.strip()
+                    if not _line or _line.startswith("#") or "=" not in _line:
+                        continue
+                    _k, _v = _line.split("=", 1)
+                    _k = _k.strip()
+                    _v = _v.strip().strip('"').strip("'")
+                    if _k and _k not in os.environ:
+                        os.environ[_k] = _v
+            except Exception:
+                pass
+
+
+def _residential_proxy_url() -> str | None:
+    """Return the residential proxy URL if configured.
+    Supports: RESIDENTIAL_PROXY, RESIDENTIAL_PROXY_URL, HTTP_PROXY, HTTPS_PROXY.
+    Expected format: http://user:pass@host:port  (or socks5://)
+    When set and non-empty, media bytes are fetched through it so the CDN
+    sees a residential egress instead of the datacenter's (fastapicloud 129.x)
+    which is hard-blocked with 426 on bcdn* even with correct Referer/XFF."""
+    for _k in ("RESIDENTIAL_PROXY", "RESIDENTIAL_PROXY_URL", "HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"):
+        _v = os.getenv(_k)
+        if _v and _v.strip():
+            return _v.strip()
+    return None
 
 # Where the bundled frontend lives when running as the desktop/mono server.
 # When frontend/dist exists, one port (8000) serves BOTH the API and the UI.
@@ -916,8 +958,13 @@ async def _proxy_stream(request: Request, target_url: str, *, is_manifest: bool 
     else:
         timeout_cfg = httpx.Timeout(10, read=300, write=60, pool=10)
     # Manifests and small text are buffered — safe to use a short-lived client.
+    # Use residential proxy if configured (same reason as media path).
     if is_manifest:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=timeout_cfg) as client:
+        _p_kwargs = {"follow_redirects": True, "timeout": timeout_cfg}
+        _p = _residential_proxy_url()
+        if _p:
+            _p_kwargs["proxy"] = _p
+        async with httpx.AsyncClient(**_p_kwargs) as client:
             r = await client.get(target_url, headers=headers)
             if r.status_code != 200:
                 raise HTTPException(status_code=r.status_code, detail="Upstream manifest error")
@@ -934,7 +981,11 @@ async def _proxy_stream(request: Request, target_url: str, *, is_manifest: bool 
             )
     is_text = any(x in target_url.lower() for x in (".srt", ".vtt", ".smi"))
     if is_text and not range_hdr:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=timeout_cfg) as client:
+        _t_kwargs = {"follow_redirects": True, "timeout": timeout_cfg}
+        _t = _residential_proxy_url()
+        if _t:
+            _t_kwargs["proxy"] = _t
+        async with httpx.AsyncClient(**_t_kwargs) as client:
             r = await client.get(target_url, headers=headers)
             return Response(
                 content=r.content,
@@ -952,7 +1003,15 @@ async def _proxy_stream(request: Request, target_url: str, *, is_manifest: bool 
     # chunk is yielded (seen as `peer closed without sending complete body`
     # with 0 bytes for any range >1KB, which is exactly the 91% stall).
     # Instead we create a client that lives until the iterator finishes.
-    client = httpx.AsyncClient(follow_redirects=True, timeout=timeout_cfg)
+    # If RESIDENTIAL_PROXY is set, the fetch egresses through the residential
+    # proxy (user's acquired proxy) instead of the datacenter — the bcdn*
+    # WAF hard-blocks 129.x datacenter egress with 426 even when Referer/XFF
+    # are correct, while residential egress returns 206 (verified locally).
+    _proxy = _residential_proxy_url()
+    _client_kwargs = {"follow_redirects": True, "timeout": timeout_cfg}
+    if _proxy:
+        _client_kwargs["proxy"] = _proxy
+    client = httpx.AsyncClient(**_client_kwargs)
     try:
         upstream = await client.send(
             client.build_request("GET", target_url, headers=headers), stream=True
