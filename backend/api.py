@@ -54,6 +54,9 @@ _proxy_lock = _threading.Lock()
 _proxy_cycle: itertools.cycle | None = None
 _proxy_list_cache: list[str] = []
 _proxy_env_snapshot: str = ""
+# Dynamic home URL pushed by your PC (no manual copy after reboot)
+_home_dynamic_url: str | None = None
+_home_dynamic_updated: float = 0.0
 
 
 def _parse_proxy_list(raw: str) -> list[str]:
@@ -86,15 +89,17 @@ def _parse_proxy_list(raw: str) -> list[str]:
 
 def _residential_proxy_list() -> list[str]:
     """Return all configured proxy URLs in priority order.
-    Priority: HOME_PROXY_URL / HOME_TUNNEL_URL (your Cloudflare Tunnel) first,
-    then RESIDENTIAL_PROXY / HTTP_PROXY etc. (your 3 free webshares).
+    Priority: dynamic HOME (pushed by your PC, no paste) > HOME_TUNNEL_URL env
+    (static ngrok or manual) > RESIDENTIAL_PROXY fallbacks (3 webshares).
     So when you're online your home residential IP is tried first; when
     you're offline that entry 429/502s, is marked unhealthy for 5 min and
     the backend transparently falls back to the free proxies — movies never stop.
     All lists accept comma / newline / semicolon / space separators."""
-    # Home tunnel is top priority when you're online
-    home_keys = ("HOME_PROXY_URL", "HOME_TUNNEL_URL", "HOME_TUNNEL_PROXY", "PRIMARY_PROXY")
+    # Dynamic home pushed by PC (no manual paste after reboot)
     home_raw: list[str] = []
+    if _home_dynamic_url:
+        home_raw.append(_home_dynamic_url)
+    home_keys = ("HOME_PROXY_URL", "HOME_TUNNEL_URL", "HOME_TUNNEL_PROXY", "PRIMARY_PROXY")
     for _k in home_keys:
         _v = os.getenv(_k)
         if _v and _v.strip():
@@ -1498,6 +1503,63 @@ async def create_report(body: ReportRequest, request: Request):
         "ntfy_error": ntfy_error,
         "message": "Thanks for the report. We'll look into it.",
     }
+
+
+# ---------------------------------------------------------------- HOME TUNNEL AUTO-REGISTER
+# So you never paste again after reboot: your PC pushes its fresh
+# trycloudflare/ngrok URL here and it becomes top priority.
+
+_home_tunnel_last_ip: str | None = None
+
+
+@app.get("/api/admin/home-tunnel")
+async def get_home_tunnel():
+    pool = _residential_proxy_pool()
+    return {
+        "dynamic_url": _home_dynamic_url,
+        "updated": _home_dynamic_updated,
+        "updated_ago": time.monotonic() - _home_dynamic_updated if _home_dynamic_url else None,
+        "pool": pool[:4],  # masked via health, here truncated
+        "pool_size": len(pool),
+    }
+
+
+@app.post("/api/admin/home-tunnel")
+async def set_home_tunnel(request: Request):
+    global _home_dynamic_url, _home_dynamic_updated, _home_tunnel_last_ip
+    # Simple auth: if HOME_TUNNEL_TOKEN is set, require it; otherwise allow any
+    # caller that knows the IP (your PC). This is not a secret admin API.
+    expected = os.getenv("HOME_TUNNEL_TOKEN", "").strip()
+    body: dict = {}
+    try:
+        body = await request.json()
+    except Exception:
+        # also allow ?url= query
+        body = {}
+    url = (body.get("url") or request.query_params.get("url") or "").strip()
+    token = (body.get("token") or request.headers.get("x-home-token") or request.query_params.get("token") or "").strip()
+    if expected and token != expected:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    if not url:
+        # Clear dynamic
+        _home_dynamic_url = None
+        _home_dynamic_updated = 0
+        return {"ok": True, "cleared": True}
+    if not url.startswith("http"):
+        raise HTTPException(status_code=400, detail="url must start with http(s)://")
+    # Basic sanity: must look like a tunnel URL
+    if not any(x in url for x in (".trycloudflare.com", ".ngrok", ".loca.lt", ".devtunnels", "cloudflare", "tunnel")):
+        # still allow, but warn
+        pass
+    _home_dynamic_url = url.rstrip("/")
+    _home_dynamic_updated = time.monotonic()
+    _home_tunnel_last_ip = _client_ip(request)
+    # Reset proxy cycle so next request picks the new home immediately
+    global _proxy_cycle, _proxy_env_snapshot
+    with _proxy_lock:
+        _proxy_cycle = None
+        _proxy_env_snapshot = ""
+    return {"ok": True, "url": _home_dynamic_url, "from_ip": _home_tunnel_last_ip}
 
 
 @app.get(_HLS_PROXY_PATH)
