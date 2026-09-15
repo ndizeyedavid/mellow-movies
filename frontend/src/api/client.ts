@@ -349,6 +349,24 @@ export function proxifyMediaUrl(url: string): string {
     return url;
   }
   if (!url.startsWith("http://") && !url.startsWith("https://")) return url;
+  // On hosted (fastapicloud etc.) the backend egress for bcdn* is datacenter
+  // and returns 426 even with correct Referer (see /debug/cdn). The Service
+  // Worker (sw.js) will instead fetch the direct bcdn* URL with
+  // Referer: https://moviebox.ph/ from the user's residential IP, so we
+  // must NOT proxify on hosted — return the direct CDN URL and let the SW
+  // handle it. Local dev (localhost) has no SW (PROD only) and needs the
+  // backend proxy to bypass the localhost Referer 429.
+  const isLocal =
+    typeof window !== "undefined" &&
+    (window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1" ||
+      window.location.hostname.startsWith("192.168.") ||
+      window.location.hostname.startsWith("10.") ||
+      API_BASE.includes("localhost") ||
+      API_BASE.includes("127.0.0.1"));
+  // In dev (localhost) we always proxify; in prod hosted we return direct.
+  const shouldProxy = isLocal || import.meta.env.DEV;
+  if (!shouldProxy) return url;
   const isHls = /\.m3u8(?:\?|$)/i.test(url);
   const proxyPath = isHls ? "/api/proxy/hls" : "/api/proxy/mp4";
   return `${API_BASE}${proxyPath}?u=${encodeURIComponent(url)}`;

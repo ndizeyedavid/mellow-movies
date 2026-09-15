@@ -785,9 +785,34 @@ def _should_proxy(url: str | None) -> bool:
     return url.startswith("http://") or url.startswith("https://")
 
 
+def _is_hosted_request(request: Request) -> bool:
+    """Detect if this request is served from a hosted datacenter (fastapicloud,
+    onrender, vercel, etc.) vs local dev. On hosted, the bcdn* media egress
+    is datacenter and returns 426 even with correct Referer (see /debug/cdn).
+    The Service Worker (sw.js) will instead fetch the bcdn* URL directly
+    from the user's residential IP with Referer: https://moviebox.ph/."""
+    host = (request.headers.get("host") or str(request.base_url) or "").lower()
+    # Hosted platform domains
+    if any(d in host for d in ("fastapicloud", "onrender.com", "vercel", "netlify", "railway")):
+        return True
+    # Local dev hosts
+    if "localhost" in host or "127.0.0.1" in host or host.startswith("192.168.") or host.startswith("10."):
+        return False
+    # Fallback: if client IP is private, it's local; if public datacenter, treat as hosted
+    # For safety, assume non-local is hosted so we don't proxify and hit 426.
+    return True
+
+
 def _proxify_streams(request: Request, streams: list[dict], hls: list[dict], dash: list[dict]):
     """Rewrite every CDN media url in-place to go through the backend proxy
-    with the correct Referer + forwarded IP. Mutates the passed lists."""
+    with the correct Referer + forwarded IP. On hosted datacenter we skip
+    mp4 proxifying — the egress is blocked with 426 (see /debug/cdn) and
+    the Service Worker will fetch the direct bcdn* URL with the correct
+    Referer from the user's residential IP instead. Mutates the passed lists."""
+    # On hosted, skip mp4 proxifying; keep HLS proxied (small segments) or
+    # let SW handle all. For now, skip all proxifying on hosted.
+    if _is_hosted_request(request):
+        return streams, hls, dash
     for s in streams:
         u = s.get("url")
         if _should_proxy(u):

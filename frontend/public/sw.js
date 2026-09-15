@@ -2,7 +2,7 @@
    API (localhost:8000) and CDN stream requests are left to the network:
    they're cross-origin and stream URLs expire, so never cache them. */
 
-const CACHE = "mellow-v1";
+const CACHE = "mellow-v2";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -24,7 +24,34 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
 
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return; // API + CDNs → network
+  // Stream CDNs (bcdn* / hakunaymatata / aoneroom) are cross-origin.
+  // The browser's <video> would send Referer = page origin (localhost or
+  // fastapicloud) which the CDN now blocks with 429/426. Intercept and
+  // re-fetch with the Referer the CDN expects, from the user's
+  // residential IP (not the datacenter egress). This is why local
+  // needed the backend proxy and why hosted datacenter 426s — the SW
+  // bypasses the datacenter entirely.
+  const isStreamHost =
+    url.hostname.includes("hakunaymatata.com") ||
+    url.hostname.includes("aoneroom.com") ||
+    url.hostname.endsWith("b-cdn.net") ||
+    url.hostname.startsWith("bcdn");
+  if (isStreamHost) {
+    event.respondWith(
+      fetch(request.url, {
+        method: "GET",
+        headers: request.headers,
+        referrer: "https://moviebox.ph/",
+        referrerPolicy: "strict-origin-when-cross-origin",
+        mode: "cors",
+        credentials: "omit",
+        redirect: "follow",
+      }).catch(() => fetch(request)),
+    );
+    return;
+  }
+
+  if (url.origin !== self.location.origin) return; // API → network
 
   // App shell: cache-first, falling back to the network; cache successful
   // hashed assets so repeat visits (and offline launches) are instant.
