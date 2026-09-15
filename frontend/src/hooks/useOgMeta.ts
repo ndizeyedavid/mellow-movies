@@ -1,13 +1,15 @@
 import { useEffect } from "react";
 
+const SITE = "https://mellowmovies.vercel.app";
 const SITE_TITLE = "Mellow Movies — Stream Movies & Shows";
 const SITE_DESC =
-  "Stream blockbuster movies and hit TV shows on demand. Free to watch.";
+  "Free movies & shows, beautifully delivered. No login, no ads — just press play. ✦ Free to watch.";
+const SITE_IMAGE = `${SITE}/og-image.png`;
 
 interface OgOptions {
   title?: string;
   description?: string;
-  /** Poster URL — may be relative; absolute URLs are preferred by scrapers. */
+  /** Poster URL — may be relative; WhatsApp requires absolute 1200x630, so we absolutize. */
   image?: string;
   /** "movie" or "show" — drives the og:type value. */
   kind?: "movie" | "show";
@@ -16,10 +18,10 @@ interface OgOptions {
 const FALLBACKS: Record<string, string> = {
   "og:title": SITE_TITLE,
   "og:description": SITE_DESC,
-  "og:image": "/favicon.svg",
+  "og:image": SITE_IMAGE,
   "twitter:title": SITE_TITLE,
   "twitter:description": SITE_DESC,
-  "twitter:image": "/favicon.svg",
+  "twitter:image": SITE_IMAGE,
 };
 
 function upsert(attr: "property" | "name", key: string, content: string) {
@@ -35,7 +37,13 @@ function upsert(attr: "property" | "name", key: string, content: string) {
 }
 
 function abs(u: string): string {
-  return /^https?:/.test(u) ? u : `${window.location.origin}${u}`;
+  // WhatsApp/FB scrapers fetch server HTML without JS, but for client-side
+  // navigation we still mutate tags after paint so same-tab shares work;
+  // force canonical site origin for the default OG image so the 1200x630
+  // PNG is reachable without auth. Poster URLs are already absolute.
+  if (/^https?:/.test(u)) return u;
+  if (u === "/favicon.svg") return SITE_IMAGE;
+  return `${window.location.origin}${u}`;
 }
 
 /**
@@ -57,13 +65,18 @@ export function useOgMeta(opts?: OgOptions) {
     if (opts) {
       const title = opts.title ? `${opts.title} — Mellow Movies` : SITE_TITLE;
       const desc = opts.description || SITE_DESC;
-      const img = abs(opts.image || FALLBACKS["og:image"]!);
-
+      const rawImg = opts.image || FALLBACKS["og:image"]!;
+      const img = abs(rawImg);
+      // WhatsApp prefers large JPEG/PNG 1200x630; keep poster absolute.
       upsert("property", "og:title", title);
       upsert("property", "og:description", desc);
       upsert("property", "og:image", img);
+      upsert("property", "og:image:width", "1200");
+      upsert("property", "og:image:height", "630");
+      upsert("property", "og:image:alt", `${opts.title || "Mellow Movies"} — Relax. Watch. Enjoy.`);
       upsert("property", "og:url", window.location.href);
       upsert("property", "og:type", opts.kind === "show" ? "video.tv_show" : "video.movie");
+      upsert("name", "twitter:card", "summary_large_image");
       upsert("name", "twitter:title", title);
       upsert("name", "twitter:description", desc);
       upsert("name", "twitter:image", img);

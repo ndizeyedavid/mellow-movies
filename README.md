@@ -5,241 +5,217 @@
 <h1 align="center">Mellow Movies</h1>
 
 <p align="center">
-  <em>A Netflix-style streaming frontend + a FastAPI backend that politely asks another website's API for content,<br/>
-  zero login, zero payments, zero permission, and absolutely zero chill.</em>
+  <em>Free movies & shows, beautifully delivered. A Netflix-grade UI on top of a<br/>
+  resilient FastAPI proxy that actually plays through geo-blocks, CDN referer gates, and datacenter egress bans.</em>
 </p>
 
 <p align="center">
+  <a href="https://mellowmovies.vercel.app"><img alt="Live" src="https://img.shields.io/badge/Live-mellowmovies.vercel.app-ff3d71?style=for-the-badge"/></a>
   <img alt="React" src="https://img.shields.io/badge/React_19-20232A?style=for-the-badge&logo=react&logoColor=61DAFB"/>
   <img alt="Vite" src="https://img.shields.io/badge/Vite_8-646CFF?style=for-the-badge&logo=vite&logoColor=white"/>
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white"/>
   <img alt="Tailwind" src="https://img.shields.io/badge/Tailwind_4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white"/>
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi&logoColor=white"/>
-  <img alt="Status" src="https://img.shields.io/badge/Status-Bug_Free_(allegedly)-4c1?style=for-the-badge"/>
+  <img alt="Proxy" src="https://img.shields.io/badge/Proxy-Residential-4c1?style=for-the-badge"/>
 </p>
 
----
-
-## What Is This Beautiful Abomination?
-
-A Netflix clone. Except Netflix gets the lawyers involved and we get **free movies**.
-
-**Mellow Movies** is two pieces duct-taped together:
-
-1. **`frontend/`** — a slick React 19 + Vite + Tailwind app that looks expensive and works like it, built pixel-by-pixel from a Figma design that somebody probably paid good money for.
-2. **`backend/`** — a FastAPI service that wraps the MovieBox public API. It does _zero_ scraping. It's basically the middleman who talks to the plug so you don't have to.
-
-The best part? **No accounts. No subscriptions. No ads.** The only thing you pay is your conscience.
-
-> ⚠️ **Important legal note:** If Netflix's legal team is reading this... it's a _project_. For _educational purposes_. The author's lawyers (a guy named Steve, unpaid) insist you keep reading.
+> ⚠️ **For education only.** This app does not host or store video files. It proxies public endpoints and signed CDN URLs for personal use. If you like a title, support its creators.
 
 ---
 
-## The Stack (And Why Each Piece Hates You A Little)
+## What it is
 
-| Layer     | Tech                      | Sarcastic justification                                   |
-| :-------- | :------------------------ | :-------------------------------------------------------- |
-| Frontend  | React 19 + TypeScript     | Hooks are like the five stages of grief but faster        |
-| Build     | Vite 8 (Rolldown)         | Webpack's awkward cousin that's actually successful       |
-| Styling   | Tailwind CSS 4            | Where your HTML went and CSS will never find it           |
-| Routing   | React Router 7            | Even our fake Netflix has real navigation                 |
-| Streaming | dash.js + hls.js          | Two libraries to do what `<video>` should've done         |
-| Backend   | FastAPI + httpx + uvicorn | Async Python, so it can fail _concurrently_               |
-| Storage   | `localStorage`            | A database for people who find SQL intimidating           |
-| PWA       | Service Worker            | Because an app you can install is an app you can't delete |
+- **Frontend** (`frontend/`) — React 19 + TypeScript + Vite + Tailwind, React Router 7, `dash.js`/`hls.js` player, PWA.
+- **Backend** (`backend/`) — FastAPI + `httpx` that signs, authorizes, and **streams bytes** with correct `Referer`, `Range`, and residential egress. Zero scraping.
+
+No logins. No ads. Just search, continue watching, and press play.
 
 ---
 
-## Features (The Brag List)
+## Features
 
-- **Hybrid search dropdown** — instant local matches _and_ debounced API results, keyboard navigable. Type `/` anywhere to focus it, like a pro gamer with a movie problem.
-- **My List** — bookmark anything, it lives in `localStorage` (a tech so cutting edge it survives a refresh). Get a fancy toast + a badge count, like a participation trophy.
-- **Continue Watching** — the app remembers where you stopped. Creepy? Yes. Convenient? Also yes.
-- **Resume playback** — close mid-scene, reopen, and it picks up right where you rage-quit.
-- **Auto-play next episode** — Netflix's most addictive feature, weaponized for free.
-- **Episode picker on the title page** — choose your season/episode _before_ entering the player, like a civilized person.
-- **Cast section with actual faces** — avatars, character roles, real humans. We found their photos. We're not sorry.
-- **Genre filter chips** — because searching through 1,000,000 titles manually is "quaint."
-- **Top 10 rail** — a ranking system invented entirely to make you feel behind on pop culture.
-- **Share button** — copy a link so you can flex your questionable taste on your friends.
-- **Open Graph cards** — share links now show a fancy preview. Your link will look important on WhatsApp.
-- **Per-page browser titles** — so you can see in your tab history exactly how deep you fell.
-- **Back-to-top button** — for when the scrolling gets too real.
-- **Installable PWA** — offline shell, online shame. Manifest + service worker included.
-- **DASH → HLS → MP4 fallback with retry** — the player tries DASH, then HLS, then MP4, retries once, and only then cries.
+- **Watch** — DASH → HLS → MP4 fallback, auto-retry per quality, stall watchdog, resume from last position.
+- **Continue Watching** — per-episode progress (`localStorage`, `progress.ts`). Fixed to hydrate on first Home load; per-title **Remove** and **Clear all**, cross-tab sync.
+- **My List** — bookmarks in `localStorage` with toast + badge.
+- **Search** — hybrid dropdown (local + debounced API, keyboard nav, `/{focus}`), `search/suggest` and `subject/search`.
+- **Title detail** — hero backdrop, seasons/episodes picker, cast, details card, "More Like This".
+- **Player** — adaptive quality, audio/subs (SRT→VTT), seek/volume, fullscreen/PiP, keyboard (`Space/K`, arrows, `M`, `F`), boxed vs wide layout, download of current quality via proxy, timestamp **Share** (`?t=`) that seeks on open.
+- **Open Graph** — per-title `og:title/description/image/url/type` via `useOgMeta` so WhatsApp/Telegram render a rich card with the title's poster (absolute URL, `video.movie`/`video.tv_show`).
+- **Report issue** — anonymous `POST /api/report` (no GitHub login) creates a GitHub issue via the server's `GITHUB_REPORT_TOKEN` and pushes to **ntfy.sh** (`NTFY_TOPIC`). Rate-limited per IP (45s). Useful when the residential proxy bandwidth runs out and streams `426/429` or stop midway.
+- **PWA** — installable `manifest.webmanifest`, icons (`favicon.svg` + `192/512`), offline shell.
 
 ---
 
-## Project Structure
+## Stack
+
+| Layer | Choice |
+|---|---|
+| Frontend | React 19, TypeScript, React Router 7 |
+| Build | Vite 8 (Rolldown), code-split vendor/player |
+| Style | Tailwind 4 |
+| Player | `dash.js` 5, `hls.js` 1, native `<video>` |
+| Backend | FastAPI, `httpx` `StreamingResponse` with `Range` passthrough, `uvicorn` |
+| Store | `localStorage` (`myList`, `progress`, cache `mm-cache:`) |
+| Deploy | Vercel (frontend) + FastAPICloud/Render (backend), or one-click local `dev.bat` |
+
+---
+
+## Project structure
 
 ```
 movies/
-├── backend/                 # The middleman (FastAPI)
-│   ├── api.py               # ~everything. yes, one file. don't judge.
-│   ├── requirements.txt     # your 3 dependencies, pinned like a pro
-│   └── verify.py            # the self-check that judges you
-├── frontend/                # The pretty face (React 19)
+├── backend/
+│   ├── api.py                 # all routes + proxy + /api/report + /health/proxy
+│   ├── requirements.txt
+│   └── verify.py
+├── frontend/
 │   ├── src/
-│   │   ├── api/             # client.ts (fetch with a memory) + media.ts (shape-shifter)
-│   │   ├── components/      # reusable UI — we're not animals, it's modular
-│   │   │   ├── layout/      # navbar, footer, search bar, the works
-│   │   │   ├── player/      # the streaming beast (dash.js, hls.js, tears)
-│   │   │   ├── home/        # hero, rails, rails, and more rails
-│   │   │   └── ui/          # buttons, cards, toasts, the essentials
-│   │   ├── pages/           # one file per screen, like a responsible dev
-│   │   ├── store/           # myList.ts + progress.ts (localStorage's finest)
-│   │   ├── hooks/           # usePageTitle, useOgMeta — magic in disguise
-│   │   └── utils/           # toast.ts, captions.ts (SRT→VTT sorcery)
-│   └── public/              # manifest, service worker, logos, vibes
-├── scripts/                 # the local dev engine room
-│   ├── start-dev.ps1        # kill old, boot backend + frontend, log everything
-│   └── stop-dev.ps1         # the cleanup crew (catches orphaned workers too)
-├── dev.bat                  # the one-click orchestrator (start/stop/restart)
-├── .logs/                   # where the backend/frontend keep their diaries
-├── CHANGELOG.md             # our humble history book
-└── README.md                # you are here (probably)
+│   │   ├── api/               # client.ts (cached fetch + proxifyMediaUrl), media.ts, report.ts
+│   │   ├── components/
+│   │   │   ├── layout/        # navbar, footer, search
+│   │   │   ├── player/        # StreamPlayer, BufferingIndicator, EpisodePanel
+│   │   │   ├── home/          # hero, rails, ContinueWatchingRail
+│   │   │   └── ui/            # MovieCard, MediaRail, ReportDialog
+│   │   ├── pages/             # Home, TitleDetail, Watch (share/download/report), Browse
+│   │   ├── store/             # myList, progress
+│   │   ├── hooks/             # usePageTitle, useOgMeta
+│   │   └── utils/             # captions (SRT→VTT), toast, subtitlePref
+│   ├── public/                # manifest, sw.js, icons, og-image, sitemap
+│   └── vercel.json
+├── scripts/                   # start-dev.ps1 / stop-dev.ps1
+├── dev.bat                    # menu: start / stop / restart local
+├── .logs/
+└── README.md
 ```
 
 ---
 
-## Getting Started
+## Getting started
 
-### 0. Prerequisites
+### Requirements
 
-- Node.js (the newer the better, like most things)
-- Python 3.11+ (the old ones are getting clingy)
+- Node 18+, Python 3.11+
 
-### 1. Zero-Effort Launch (The New Way)
-
-Everything runs **fully local** now. No servers, no deploys, no geo-gating drama. One double-click:
+### One-click local (zero config)
 
 ```bash
-dev.bat            # shows a menu: start / stop / restart
+dev.bat            # menu
+dev.bat start      # backend :8000 + frontend :5173, auto-opens PWA
+dev.bat stop
 ```
 
-Or skip the menu and pass a command straight in:
+Logs in `.logs/`. Backend serves the built frontend at `/` when `frontend/dist` exists.
+
+### Manual
 
 ```bash
-dev.bat start      # closes anything already running, then boots backend + frontend
-dev.bat stop       # closes the backend and frontend
-dev.bat restart    # stop, then start again
-```
-
-First run installs frontend deps automatically. Logs go in `.logs\` (backend.log, frontend.log, plus `.err.log` twins for the drama). The backend picks port `8000`, the frontend `5173` — closing the old instances before starting is handled for you, even the sneaky orphaned uvicorn workers. And when everything's up, it **auto-opens the installed PWA** (Mellow Movies) in its own window — or falls back to opening the browser tab.
-
-Then open `http://localhost:5173` and try not to say "wow" out loud.
-
-> Manual mode (the old way) still works if you're into that:
-
-### 2. Backend (the plug) — manual
-
-```bash
+# backend
 cd backend
 pip install -r requirements.txt
 python -m uvicorn api:app --host 0.0.0.0 --port 8000
-```
 
-If it works, you'll see Uvicorn's beautiful ASCII art. If it doesn't, it's not you, it's the upstream API having feelings.
-
-### 3. Frontend (the face) — manual
-
-```bash
+# frontend
 cd frontend
 npm install
 npm run dev
 ```
 
-### 4. The other scripts
-
-| Script                  | What it does                                               |
-| :---------------------- | :--------------------------------------------------------- |
-| `dev.bat`               | The orchestrator — menu + `start/stop/restart`             |
-| `scripts\start-dev.ps1` | Kills old servers, boots backend + frontend, opens the PWA |
-| `scripts\stop-dev.ps1`  | Kills backend + frontend (workers included)                |
-| `npm run dev`           | Vite dev server with magic instant refresh                 |
-| `npm run build`         | `tsc -b && vite build` — the moment of truth               |
-| `npm run lint`          | ESLint judges your code so you don't have to               |
-| `npm run preview`       | Previews the built app (build first, duh)                  |
-| `python verify.py`      | Backend self-check that claims everything's fine           |
+Other: `npm run build` / `preview` / `lint`, `python verify.py` (backend self-check).
 
 ---
 
-## API Endpoints (The Backend's Social Life)
+## Environment
 
-| Endpoint                            | Description                                         |
-| :---------------------------------- | :-------------------------------------------------- |
-| `GET /home`                         | Homepage sections, banners, the whole shebang       |
-| `GET /movies?genre=`                | Movie catalog — now with genre filters!             |
-| `GET /tv-series?genre=`             | TV shows, because movies weren't enough             |
-| `GET /animation?genre=`             | Animated things, for the refined folks              |
-| `GET /search?q=`                    | Full-text search (with real `subjectType` now!)     |
-| `GET /search/suggest?q=`            | Autocomplete — reads your mind, judges your taste   |
-| `GET /detail/{slug}`                | Full metadata: rating, cast, seasons, the works     |
-| `GET /api/stream/{id}?detail_path=` | The crown jewel — actual stream URLs (DASH/HLS/MP4) |
-| `GET /api/stream/{id}/captions`     | Subtitles, for people who can't hear the dub        |
+| Var | Where | Notes |
+|---|---|---|
+| `RESIDENTIAL_PROXY` | backend | `http://user:pass@host:port` (or `socks5://`). When set, `/api/proxy/*` egresses residential so `bcdn*` returns `206` not `426`. Supports `RESIDENTIAL_PROXY_URL` / `HTTP_PROXY` aliases. Read from `backend/.env`, root `.env`, or platform env. See free plan-B options below. |
+| `GITHUB_REPORT_TOKEN` | backend | Fine-grained PAT with `issues: write` for `ndizeyedavid/mellow-movies` — lets `/api/report` open issues anonymously. Optional `GITHUB_REPORT_REPO` (default `ndizeyedavid/mellow-movies`) and `GITHUB_REPORT_LABELS` (`user-report,bug`). |
+| `NTFY_TOPIC` | backend | e.g. `mellow-movies-reports` — you subscribe in the ntfy.sh app to get phone pushes for each report. Optional `NTFY_SERVER` (default `https://ntfy.sh`). |
+| `VITE_API_BASE` | frontend | e.g. `https://mellow-movies.fastapicloud.dev` in production. Local: `http://localhost:8000` (or `/api` rewrite via `vercel.json`). |
 
----
+Create `backend/.env` (ignored by git) — never commit tokens:
 
-## The Great Deployment War (feat. The Server of Shame)
-
-Here's the saga, because this repo earned it:
-
-1. **Hosted the backend on Render.** Catalog, search, detail — everything worked. Beautiful.
-2. **Streams died.** `hasResource: false`. Empty. Silent. Cold.
-3. **The culprit:** not your code. Not Render. The upstream API **geo-gates stream URLs by request IP**. Your residential South African IP? Works. Render's AWS datacenter IP? Blocked harder than a regional Netflix title.
-4. **Attempted escape:** switched Render regions — Frankfurt, Singapore... AWS everywhere. All denied.
-5. **The Server of Shame was born.** Every host we chased became another name on a growing graveyard:
-   - **Fly.io** — sounded promising, then broke our heart with a bill ("not free" it said, with tears in its eyes).
-   - **PythonAnywhere** — "looks promising", we said. Then discovered the free plan **whitelists outbound hosts** and `moviebox.ph` / `aoneroom.com` were not invited to that party. The API couldn't even talk to the plug it was supposed to wrap.
-   - **Every free tier** we auditioned either geo-blocked us, whitelisted us out of existence, or demanded a credit card like it was a nightclub.
-6. **We got outsmarted by it, then outsmarted it back.** The backend now **forwards the caller's residential IP** to the upstream via `X-Forwarded-For` + `X-Real-IP` on every request — but especially on the stream `play` call. The upstream trusted it. `hasResource` flipped to `true` from an AWS host. **We are, once again, hostable.**
-7. **Current status:** **hybrid.** Run it at home with `dev.bat + scripts/` (one double-click, works offline, zero drama) **or** host it — Render/Fly/whoever will finally give you a working stream as long as the _caller_ is on a residential IP. Best of both worlds.
-8. **Lesson learned:** the internet is a series of middlemen blocking each other's middlemen. But sometimes the blocker believes the middleman's forwarding headers. When it does, you win.
-
-> **Moral of the story:** Deploying is easy. Deploying somewhere the upstream doesn't hate you is a full-time job — until you convince the upstream you're not who you are. Then it's a five-minute job.
+```
+RESIDENTIAL_PROXY=http://user:pass@host:port
+GITHUB_REPORT_TOKEN=github_pat_xxx
+GITHUB_REPORT_REPO=ndizeyedavid/mellow-movies
+NTFY_TOPIC=mellow-movies-reports
+```
 
 ---
 
-## ❓ FAQ (Frequently Asked, Seldom Answered)
+## API
 
-**Q: Is this legal?**
-A: It's a personal project for educational purposes. That's what we're going with. Steve the unpaid lawyer says stick to that story.
-
-**Q: Why no login?**
-A: We already know what you watch. We're not going to store it too. (Okay, fine, localStorage does.)
-
-**Q: Why `localStorage` and not a database?**
-A: Because the user is the database. Zero server costs. Peak efficiency. Don't think about it too hard.
-
-**Q: Why is the entire backend one file?**
-A: Because `api.py` is 560 lines of pure, unfiltered confidence. Refactoring is for people with time.
-
-**Q: How did you get streams working in production?**
-A: The backend forwards the caller's residential IP upstream via `X-Forwarded-For`/`X-Real-IP`. The upstream believed it. Weeks of suffering, undone by two headers. See the war section above; there's a moral in there somewhere.
-
-**Q: Local or hosted — which should I use?**
-A: Both work now. For a quick, private, no-config setup: `dev.bat`. For sharing/always-on: host the backend, make sure your callers are on residential IPs (most people are), and let the forwarding do the heavy lifting.
-
-**Q: Will this run on my toaster?**
-A: The frontend, maybe. The backend, no. The toaster has standards.
+| Endpoint | Purpose |
+|---|---|
+| `GET /home` | Sections & banners |
+| `GET /movies?genre=&page=` etc. | Catalog (`tabId` filters) |
+| `GET /search?q=` / `GET /search/suggest?q=` | Search & autocomplete (with `subjectType`) |
+| `GET /detail/{slug}` | Metadata, seasons, cast |
+| `GET /api/stream/{id}?detail_path=&se=&ep=` | Streams proxified to `…/api/proxy/mp4?u=…` (and `/api/proxy/hls`) so the browser never sends a `localhost`/`vercel.app` Referer to the CDN. |
+| `GET /api/stream/{id}/captions` | Subtitles (SRT, converted to VTT client-side) |
+| `GET /api/proxy/hls?u=`, `/api/proxy/seg?u=`, `/api/proxy/mp4?u=` | Media proxy: `Referer: https://moviebox.ph/`, `Range` passthrough, optional residential proxy, long `read` timeout, streamed `206`. |
+| `POST /api/report` | Anonymous report → GitHub issue + ntfy. See body in `backend/api.py: ReportRequest`. |
+| `GET /health/proxy` | (future) probe the proxy 1KB HEAD to detect bandwidth exhaustion early. |
 
 ---
 
-## Legal Disclaimer (The Serious Part, Wrapped in Humor)
+## The deployment war (abridged)
 
-This project is built for **educational and personal use only**. It does not host, store, or distribute any media files — it simply displays content from an external public API. The author is not responsible for:
+Upstream geo-gates `subject/play` by IP and `bcdn*` bytes gate by `Referer` + egress IP:
 
-- What you watch (that's between you and your browser history)
-- The upstream API changing and breaking everything (it will)
-- The geo-gating situation described above (we're as surprised as you are)
-- Any cease-and-desist letters (forward them to Steve)
+- `Referer: https://moviebox.ph/` → `206`, anything else → `429`.
+- Even with correct `Referer`, datacenter egress (`fastapicloud` `129.x`) → `426 Upgrade Required` (hard block). Residential egress → `206`.
+- Fix: proxy bytes via `RESIDENTIAL_PROXY` with `Referer: https://moviebox.ph/` + `**_geo_headers(ip)` (`X-Forwarded-For` via `cf-connecting-ip`), long streaming client (was closed via `async with` before first chunk → `91%` stall), no `Accept-Encoding` on video, hosted now forced to proxy like local per inspection.
 
-If you like a title, support the people who made it. If you're going to pirate anyway, at least use good taste.
+Lesson: the internet is middlemen blocking middlemen. Sometimes the blocker believes forwarded headers — sometimes you just need a different egress.
+
+---
+
+## SEO & share cards
+
+- `index.html` — `og:*`, `twitter:*`, `canonical`, `preconnect` for Google Fonts, `theme-color`, `manifest`. Runtime per-title overrides via `useOgMeta`/`usePageTitle` produce: `Title — Mellow Movies` and poster as `og:image` (absolute URL required by WhatsApp).
+- **WhatsApp gotcha:** WhatsApp scrapes **server HTML**, not JS-mutated tags. For static builds you'll need a pre-rendered `og:image` (commit `og-image.png` and set default `og:image` to `https://mellowmovies.vercel.app/og-image.png`, `1200×630`). Per-title previews require SSR or a prerender worker — see notes inside `useOgMeta`.
+- `sitemap.xml`, `robots.txt`, `og-image.png` (`1200×630`) and PWA icons are in `frontend/public/`; `vercel.json` rewrites SPA routes while keeping `/api/*` for the backend.
+
+Validate cards: `https://developers.facebook.com/tools/debug/` (Share Debugger), `curl -A facebookexternalhit "https://mellowmovies.vercel.app/title/some-slug"`.
+
+---
+
+## Reporting & free proxy plan-B
+
+**When the residential proxy bandwidth runs out**, `/api/proxy/*` will `407/429/502` and streams fail. The app surfaces that in `StreamPlayer` `mediaError` (fanned out to next quality) and offers **Report issue** (`ReportDialog`) — no user GitHub account. The report opens a GitHub issue in `ndizeyedavid/mellow-movies` (`user-report`) and pushes to your phone via **ntfy.sh** (`NTFY_TOPIC`).
+
+**Free / longer-lasting fallback proxies (no affiliate, check ToS):**
+
+- **Self-host Cloudflare Tunnel** (`cloudflared tunnel --url http://localhost:8000`) — your PC egress is residential `206`, free, bandwidth = your ISP. Requires PC on. Best zero-cost fallback when the paid proxy drains.
+- **Webshare 10 proxies / 1GB/mo free** — `webshare.io` free tier, refresh by re-registering or rotating sub-accounts. Residential-like egress, supports `http://user:pass@host:port` directly in `RESIDENTIAL_PROXY`. Keep one spare Credential set in `backend/.env` and rotate monthly.
+- **Oxylabs / Bright Data trial rotation** — 7-day trials with ~1–5GB; sign up with different emails for sequential fallbacks. Put `RESIDENTIAL_PROXY` per env on a different backend deploy slot.
+- **Peer-to-peer free meshes** (Honeygain `peer` mode, `PIP` via Tor — slower, avoid for video) — only if you need an emergency trickle; not recommended for streaming.
+
+Rotate: keep two `RESIDENTIAL_PROXY` values and swap the env var (or chain fallback in code) when one `426/429`s for an hour.
+
+---
+
+## FAQ
+
+**Legal?** Educational / personal use. Nothing hosted here; signed URLs expire.
+
+**Why no login?** `localStorage` is free and private. Zero DB.
+
+**Why one file for the backend?** `api.py` is ~1100 lines of earned scar tissue. Refactor when it hurts.
+
+**Local or hosted?** Both work. Local (`dev.bat`) is simplest (your residential IP = `206`). Hosted needs `RESIDENTIAL_PROXY` or your home tunnel to stay `206`.
+
+---
+
+## Legal
+
+For **educational and personal use**. No media is hosted. Respect creators you enjoy.
 
 ---
 
 <p align="center">
-  <sub>Built with 🍿, questionable judgment, and an unhealthy amount of `useEffect`.</sub>
-  <br/>
-  <sub>Mellow Movies - Free movies, free code, free therapy (results may vary).</sub>
+  <sub>Built with 🍿, questionable judgment, and an unhealthy amount of `useEffect`.</sub><br/>
+  <sub>Mellow Movies — free movies, free code, free therapy (results may vary).</sub>
 </p>
