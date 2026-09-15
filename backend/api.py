@@ -98,15 +98,15 @@ PLAYER_HEADERS = {
 }
 
 def _client_ip(request: Request | None) -> str:
-    """Best-effort real caller IP: first forwarded hop, else X-Real-IP, else socket peer."""
+    """Best-effort real caller IP: Cloudflare / proxy headers first, then socket peer."""
     if request is None:
         return ""
-    fwd = request.headers.get("x-forwarded-for")
-    if fwd:
-        return fwd.split(",")[0].strip()
-    real = request.headers.get("x-real-ip")
-    if real:
-        return real.strip()
+    # Cloudflare and similar edge providers
+    for hdr in ("cf-connecting-ip", "true-client-ip", "cf-connecting-ipv6", "x-forwarded-for", "x-real-ip"):
+        val = request.headers.get(hdr)
+        if val:
+            # x-forwarded-for may contain multiple hops
+            return val.split(",")[0].strip()
     return request.client.host if request.client else ""
 
 def _is_private_ip(ip: str) -> bool:
@@ -880,13 +880,16 @@ async def _proxy_stream(request: Request, target_url: str, *, is_manifest: bool 
             "Accept": "*/*",
         }
     else:
-        # For hosted datacenter 426 fallback, try alternative Referers.
-        # Local 206 with moviebox.ph, hosted 426 with same — try mzfi.me
-        # (current player domain from /media-player/get-domain).
+        # Media proxy: put back your original fix — forward the viewer's
+        # residential IP via X-Forwarded-For / X-Real-IP so the CDN (which
+        # geo-locks the signed mp4) sees the user's IP instead of the
+        # datacenter egress. This is what made hosted work before for
+        # `hasResource`, and is needed for the bcdnxw bytes too (otherwise
+        # hosted egress gets 426 Upgrade Required from Tengine).
+        # For hosted datacenter 426 fallback, we also retry with mzfi.me.
         base_headers = {
             "User-Agent": PLAYER_HEADERS["User-Agent"],
-            # Don't forward datacenter XFF for media — CDN checks TCP IP,
-            # not XFF, and XFF with datacenter IP may trigger WAF 426.
+            **_geo_headers(ip),
             "Referer": "https://moviebox.ph/",
             "Origin": "https://moviebox.ph",
             "Accept": "*/*",
