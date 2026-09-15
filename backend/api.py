@@ -788,8 +788,9 @@ def _should_proxy(url: str | None) -> bool:
 def _is_hosted_request(request: Request) -> bool:
     """Detect if this request is served from a hosted datacenter (fastapicloud,
     onrender, vercel, etc.) vs local dev. On hosted, the bcdn* media egress
-    is datacenter and returns 426 even with correct Referer (see /debug/cdn).
-    The Service Worker (sw.js) will instead fetch the bcdn* URL directly
+    is datacenter and returns 426 even with correct Referer (verified via
+    hosted probing: all header combos 426 from 129.x egress, 206 locally).
+    The player blob fallback instead fetches the bcdn* URL directly
     from the user's residential IP with Referer: https://moviebox.ph/."""
     host = (request.headers.get("host") or str(request.base_url) or "").lower()
     # Hosted platform domains
@@ -806,9 +807,9 @@ def _is_hosted_request(request: Request) -> bool:
 def _proxify_streams(request: Request, streams: list[dict], hls: list[dict], dash: list[dict]):
     """Rewrite every CDN media url in-place to go through the backend proxy
     with the correct Referer + forwarded IP. On hosted datacenter we skip
-    mp4 proxifying — the egress is blocked with 426 (see /debug/cdn) and
-    the Service Worker will fetch the direct bcdn* URL with the correct
-    Referer from the user's residential IP instead. Mutates the passed lists."""
+    proxifying — the egress is blocked with 426 and the player blob fallback
+    fetches the direct bcdn* URL with the correct Referer from the user's
+    residential IP instead. Mutates the passed lists."""
     # On hosted, skip mp4 proxifying; keep HLS proxied (small segments) or
     # let SW handle all. For now, skip all proxifying on hosted.
     if _is_hosted_request(request):
@@ -1021,65 +1022,6 @@ async def proxy_seg(request: Request, u: str = Query(..., description="Absolute 
 @app.get(_MP4_PROXY_PATH)
 async def proxy_mp4(request: Request, u: str = Query(..., description="Absolute media file URL (mp4/m4s)")):
     return await _proxy_stream(request, u, is_manifest=False)
-
-
-@app.get("/debug/cdn")
-async def debug_cdn(request: Request, u: str = Query("https://bcdnxw.hakunaymatata.com/bt/640ff12864b2bb75b1a394e60ecb4d3c.mp4?sign=86d9e77c99cdb7d0c70404565d66387e&t=1789455866")):
-    """Debug helper for hosted egress: try several header combos against the
-    given CDN url and return what each gets. Helps diagnose 426 on fastapicloud."""
-    ip = _client_ip(request)
-    results = {"client_ip": ip, "geo_headers": _geo_headers(ip), "tests": []}
-
-    # Common target - use provided u or default
-    test_cases = [
-        ("minimal", {"User-Agent": PLAYER_HEADERS["User-Agent"], "Referer": "https://moviebox.ph/", "Origin": "https://moviebox.ph", "Range": "bytes=0-1023"}),
-        ("minimal+geo", {"User-Agent": PLAYER_HEADERS["User-Agent"], "Referer": "https://moviebox.ph/", "Origin": "https://moviebox.ph", "Range": "bytes=0-1023", **_geo_headers(ip)}),
-        ("player_headers", {**PLAYER_HEADERS, "Referer": "https://moviebox.ph/", "Origin": "https://moviebox.ph", "Range": "bytes=0-1023", **_geo_headers(ip)}),
-        ("no_referer", {"User-Agent": PLAYER_HEADERS["User-Agent"], "Range": "bytes=0-1023", **_geo_headers(ip)}),
-        ("identity_encoding", {"User-Agent": PLAYER_HEADERS["User-Agent"], "Referer": "https://moviebox.ph/", "Origin": "https://moviebox.ph", "Range": "bytes=0-1023", "Accept-Encoding": "identity", **_geo_headers(ip)}),
-    ]
-    # Also test without Range (full)
-    test_cases.append(("full_no_range", {"User-Agent": PLAYER_HEADERS["User-Agent"], "Referer": "https://moviebox.ph/", "Origin": "https://moviebox.ph", **_geo_headers(ip)}))
-
-    async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
-        for name, hdrs in test_cases:
-            try:
-                # Ensure Accept-Encoding not compressed unless specified
-                if "Accept-Encoding" not in hdrs:
-                    hdrs["Accept-Encoding"] = "identity"
-                r = await client.get(u, headers=hdrs)
-                results["tests"].append({
-                    "name": name,
-                    "status": r.status_code,
-                    "content_type": r.headers.get("content-type"),
-                    "content_length": r.headers.get("content-length"),
-                    "content_range": r.headers.get("content-range"),
-                    "server": r.headers.get("server"),
-                    "body_snippet": r.text[:500] if r.headers.get("content-type","").startswith("text") else f"binary {len(r.content)}",
-                })
-            except Exception as e:
-                results["tests"].append({"name": name, "error": str(e)})
-
-    # Also test what _proxy_stream would do (minimal media headers)
-    try:
-        # Use the actual proxy logic but capture upstream status via direct call
-        from unittest.mock import MagicMock
-        # Just report what headers _proxy_stream would send
-        minimal_headers = {
-            "User-Agent": PLAYER_HEADERS["User-Agent"],
-            "Referer": "https://moviebox.ph/",
-            "Origin": "https://moviebox.ph",
-            "Accept": "*/*",
-            "Accept-Encoding": "identity",
-            "Connection": "keep-alive",
-            "Range": "bytes=0-1023",
-            **_geo_headers(ip),
-        }
-        results["proxy_would_send"] = minimal_headers
-    except Exception as e:
-        results["proxy_error"] = str(e)
-
-    return results
 
 
 # Allow HEAD for MP4 probing (some players / devtools issue HEAD first)
