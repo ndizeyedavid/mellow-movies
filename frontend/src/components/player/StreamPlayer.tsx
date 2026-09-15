@@ -63,6 +63,8 @@ interface StreamPlayerProps {
   onProgress?: (position: number, duration: number) => void;
   /** Fired when the media finishes playing (drives "up next"). */
   onEnded?: () => void;
+  /** Report playback issue anonymously (creates GitHub issue + ntfy). */
+  onReport?: (message: string) => void;
 }
 
 /**
@@ -83,6 +85,7 @@ export default function StreamPlayer({
   onToggleView,
   onProgress,
   onEnded,
+  onReport,
 }: StreamPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -1037,13 +1040,31 @@ export default function StreamPlayer({
           {mediaError && (
             <p className="max-w-sm text-sm text-muted">{mediaError}</p>
           )}
-          <button
-            onClick={() => setReloadKey((k) => k + 1)}
-            className="flex items-center gap-2 rounded-lg bg-primary px-6 py-3 text-base font-semibold text-white transition-colors hover:bg-primary-dark"
-          >
-            <FaRotateRight className="h-4 w-4" />
-            Retry
-          </button>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <button
+              onClick={() => setReloadKey((k) => k + 1)}
+              className="flex items-center gap-2 rounded-lg bg-primary px-6 py-3 text-base font-semibold text-white transition-colors hover:bg-primary-dark"
+            >
+              <FaRotateRight className="h-4 w-4" />
+              Retry
+            </button>
+            {onReport && (
+              <button
+                onClick={() => onReport(mediaError || "Stream error")}
+                className="flex items-center gap-2 rounded-lg border border-line bg-card px-5 py-2.5 text-sm font-semibold text-white hover:bg-white/10"
+              >
+                Report issue
+              </button>
+            )}
+          </div>
+          {onReport && (
+            <button
+              onClick={() => onReport(mediaError || "Stream stopped midway")}
+              className="text-xs text-muted underline hover:text-white"
+            >
+              Report playback issue anonymously
+            </button>
+          )}
         </div>
       )}
 

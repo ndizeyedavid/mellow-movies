@@ -32,6 +32,7 @@ import BufferingIndicator from "../components/player/BufferingIndicator";
 import EpisodePanel from "../components/player/EpisodePanel";
 import MediaRail from "../components/ui/MediaRail";
 import Button from "../components/ui/Button";
+import ReportDialog from "../components/ReportDialog";
 import backIcon from "../assets/icon-arrow-left.svg";
 
 /** Highest first — 1080 > 720 > 480 > 360. Keys matched case-insensitively. */
@@ -168,6 +169,8 @@ function WatchContent({ item }: { item: MediaItem }) {
     captions: Array<{ lang: string; label: string; src: string }>;
   } | null>(null);
   const [recommendations, setRecommendations] = useState<MediaItem[]>([]);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportError, setReportError] = useState("");
 
   const isShow = item.type === "show" && (item.seasonMap?.length ?? 0) > 0;
   // Movies live under "season 0" in the moviebox catalog; TV shows use
@@ -175,8 +178,12 @@ function WatchContent({ item }: { item: MediaItem }) {
   const se = isShow ? pick.season : (item.seasonMap?.[0]?.se ?? 0);
   const ep = isShow ? pick.episode : 0;
   const playerKey = `${item.id}-s${pick.season}e${pick.episode}`;
+  // ?t= timestamp share: ?t=123 means "start at 123s". Wins over saved progress.
+  const tParam = Number(searchParams.get("t"));
+  const shareAt = Number.isFinite(tParam) && tParam > 0 ? tParam : null;
   // Resume position for the current episode (read once per episode mount).
-  const resumeAt = getProgress(playerKey)?.position;
+  const savedAt = getProgress(playerKey)?.position;
+  const resumeAt = shareAt ?? savedAt;
 
   // Resolve the playable source for the selected episode.
   useEffect(() => {
@@ -312,15 +319,53 @@ function WatchContent({ item }: { item: MediaItem }) {
     null,
   );
   const lastSaveAtRef = useRef(0);
+  const [currentPos, setCurrentPos] = useState(0);
 
   const handleProgress = (position: number, duration: number) => {
     lastProgressRef.current = { position, duration };
+    setCurrentPos(position);
     const now = Date.now();
     // Throttle localStorage writes to ~every 5s of playback.
     if (now - lastSaveAtRef.current >= 5000) {
       lastSaveAtRef.current = now;
       saveProgress({ key: playerKey, item, position, duration });
     }
+  };
+
+  const handleTimestampShare = async () => {
+    const t = Math.floor(currentPos || lastProgressRef.current?.position || 0);
+    const base = `${window.location.origin}/watch/${item.id}`;
+    const params = new URLSearchParams();
+    if (isShow) {
+      params.set("se", String(pick.season));
+      params.set("ep", String(pick.episode));
+    }
+    if (t > 1) params.set("t", String(t));
+    const url = params.toString() ? `${base}?${params}` : base;
+    try {
+      await navigator.clipboard.writeText(url);
+      showToast("Link copied", { message: t > 1 ? `Starts at ${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}` : item.title });
+    } catch {
+      showToast("Share link", { message: url, duration: 6000 });
+    }
+  };
+
+  const handleDownload = () => {
+    // Download current quality via residential proxy (backend /api/proxy/mp4)
+    const src = streamSrcs[0];
+    if (!src) return;
+    const a = document.createElement("a");
+    a.href = src;
+    const safe = item.title.replace(/[^\w\- ]/g, "").slice(0, 60) || "video";
+    const tag = isShow ? `S${pick.season}E${pick.episode}` : "";
+    const ext = src.includes(".m3u8") ? "m3u8" : "mp4";
+    a.download = `${safe} ${tag}.${ext}`.trim();
+    a.rel = "noopener";
+    // Let proxy set Content-Disposition; download attribute is hint
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    showToast("Download started", { message: "If it fails, try another quality", duration: 3000 });
   };
 
   // Flush the latest position when switching episodes / leaving the page —
@@ -402,6 +447,10 @@ function WatchContent({ item }: { item: MediaItem }) {
       startAt={resumeAt}
       onProgress={handleProgress}
       onEnded={handleEnded}
+      onReport={(msg) => {
+        setReportError(msg);
+        setReportOpen(true);
+      }}
     />
   );
 
@@ -433,6 +482,38 @@ function WatchContent({ item }: { item: MediaItem }) {
     ) : (
       viewToggle
     );
+
+  const actionBar = (
+    <div className="mt-5 flex flex-wrap gap-3">
+      <button
+        onClick={handleTimestampShare}
+        className="inline-flex items-center gap-2 rounded-lg border border-line bg-card px-4 py-2 text-sm font-semibold text-white hover:border-line2 hover:text-primary"
+        title="Copy link with timestamp"
+      >
+        <FaArrowUpRightFromSquare className="h-3.5 w-3.5" />
+        Share at {Math.floor((currentPos || lastProgressRef.current?.position || 0) / 60)}:
+        {String(Math.floor((currentPos || lastProgressRef.current?.position || 0) % 60)).padStart(2, "0")}
+      </button>
+      <button
+        onClick={handleDownload}
+        disabled={loadingStream || !streamSrcs.length}
+        className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+        title="Download current quality via proxy"
+      >
+        ↓ Download {streamLabels[0] || "MP4"}
+      </button>
+      <button
+        onClick={() => {
+          setReportError(`Stopped at ${Math.floor(currentPos || 0)}s, player error`);
+          setReportOpen(true);
+        }}
+        className="inline-flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-400 hover:bg-red-500/20"
+        title="Report playback issue (stopped midway, 429, 426, proxy exhausted)"
+      >
+        Report issue
+      </button>
+    </div>
+  );
 
   const infoSection = (
     <div>
@@ -559,7 +640,10 @@ function WatchContent({ item }: { item: MediaItem }) {
         <div className={isBoxed ? "mt-5" : "mt-6 2xl:mt-10"}>{backButton}</div>
 
         <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_420px] 2xl:gap-8">
-          <div className="flex min-w-0 flex-col gap-6">{infoSection}</div>
+          <div className="flex min-w-0 flex-col gap-6">
+            {infoSection}
+            {actionBar}
+          </div>
           {!isBoxed && <aside className="min-w-0">{sidePanel}</aside>}
         </div>
       </div>
@@ -573,6 +657,21 @@ function WatchContent({ item }: { item: MediaItem }) {
       >
         {watchNext}
       </div>
+
+      <ReportDialog
+        open={reportOpen}
+        onClose={() => setReportOpen(false)}
+        context={{
+          title: item.title,
+          detailPath: item.id,
+          subjectId: item.subjectId,
+          se,
+          ep,
+          streamUrl: streamSrcs[0],
+          error: reportError,
+          mediaError: reportError.includes("code") ? reportError : undefined,
+        }}
+      />
     </div>
   );
 }
