@@ -17,7 +17,11 @@ interface ReportDialogProps {
   };
 }
 
-export default function ReportDialog({ open, onClose, context }: ReportDialogProps) {
+export default function ReportDialog({
+  open,
+  onClose,
+  context,
+}: ReportDialogProps) {
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
 
@@ -38,11 +42,19 @@ export default function ReportDialog({ open, onClose, context }: ReportDialogPro
         media_error: context.mediaError,
         message: message.trim() || undefined,
       });
-      showToast("Report sent", { message: res.github_issue ? "GitHub issue created" : "We'll look into it", duration: 3000 });
+      showToast("Report sent", {
+        message: res.github_issue
+          ? "GitHub issue created"
+          : "We'll look into it",
+        duration: 3000,
+      });
       onClose();
       setMessage("");
     } catch (e) {
-      showToast("Report failed", { message: e instanceof Error ? e.message : String(e), duration: 4000 });
+      showToast("Report failed", {
+        message: e instanceof Error ? e.message : String(e),
+        duration: 4000,
+      });
     } finally {
       setSending(false);
     }
@@ -52,11 +64,22 @@ export default function ReportDialog({ open, onClose, context }: ReportDialogPro
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
       <div className="w-full max-w-lg rounded-2xl border border-line bg-card p-6 shadow-2xl">
         <h3 className="text-lg font-bold text-white">Report playback issue</h3>
-        <p className="mt-1 text-sm text-muted">No GitHub account needed. This creates an issue for the developer and sends a push notification.</p>
+        <p className="mt-1 text-sm text-muted">
+          This creates an issue for moi the developer to look into and fix it
+          ASAP.
+        </p>
         <div className="mt-3 rounded-lg bg-black/40 p-3 text-xs text-soft font-mono break-all">
-          <div><span className="text-muted">Title:</span> {context.title || "—"}</div>
-          <div><span className="text-muted">Detail:</span> {context.detailPath || "—"} S{context.se}E{context.ep}</div>
-          <div><span className="text-muted">Error:</span> {context.error || context.mediaError || "—"}</div>
+          <div>
+            <span className="text-muted">Title:</span> {context.title || "—"}
+          </div>
+          <div>
+            <span className="text-muted">Detail:</span>{" "}
+            {context.detailPath || "—"} S{context.se}E{context.ep}
+          </div>
+          <div>
+            <span className="text-muted">Error:</span>{" "}
+            {context.error || context.mediaError || "—"}
+          </div>
         </div>
         <textarea
           value={message}
@@ -78,10 +101,9 @@ export default function ReportDialog({ open, onClose, context }: ReportDialogPro
             disabled={sending}
             className="rounded-lg bg-primary px-5 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50"
           >
-            {sending ? "Sending…" : "Send anonymously"}
+            {sending ? "Sending…" : "Send"}
           </button>
         </div>
-        <p className="mt-3 text-xs text-muted">Rate-limited (45s). Also sent to ntfy.sh if configured.</p>
       </div>
     </div>
   );

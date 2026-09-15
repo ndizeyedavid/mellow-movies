@@ -1139,7 +1139,6 @@ async def create_report(body: ReportRequest, request: Request):
     ts = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
     md_lines = [
         f"**Reported at:** {ts}",
-        f"**IP:** `{ip}`",
         f"**Page:** {body.url or '—'}",
         f"**Watch:** {body.detail_path or '—'} (subjectId={body.subject_id or '—'} se={body.se} ep={body.ep})",
         f"**Title:** {title}",
@@ -1152,7 +1151,7 @@ async def create_report(body: ReportRequest, request: Request):
         body.message.strip() if body.message and body.message.strip() else "_No message_",
         "",
         "---",
-        "_Auto-created via /api/report (anonymous, no user GitHub account)_",
+        "_Auto-created via /api/report (anonymous)_",
     ]
     md_body = "\n".join(md_lines)
 
