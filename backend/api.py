@@ -109,10 +109,27 @@ def _client_ip(request: Request | None) -> str:
         return real.strip()
     return request.client.host if request.client else ""
 
+def _is_private_ip(ip: str) -> bool:
+    """Loopback / private / link-local — not useful to forward to the CDN."""
+    if not ip:
+        return True
+    ip = ip.strip()
+    if ip in ("127.0.0.1", "::1", "localhost"):
+        return True
+    # 10/8, 172.16/12, 192.168/16, 169.254/16, fc00::/7, fe80::/10
+    try:
+        import ipaddress
+        addr = ipaddress.ip_address(ip)
+        return addr.is_private or addr.is_loopback or addr.is_link_local
+    except Exception:
+        return False
+
+
 def _geo_headers(client_ip: str) -> dict:
     """Forward the caller's IP upstream so it thinks a residential client called,
-    in case the stream geo-lock trusts forwarded headers."""
-    if not client_ip:
+    in case the stream geo-lock trusts forwarded headers. Private / loopback
+    IPs are skipped — the backend's own egress IP is already residential."""
+    if not client_ip or _is_private_ip(client_ip):
         return {}
     return {"X-Forwarded-For": client_ip, "X-Real-IP": client_ip}
 
@@ -639,14 +656,20 @@ async def get_stream_sources(request: Request, subject_id: str, detail_path: str
         }
         for s in data.get("streams", [])
     ]
+    # Rewrite every CDN url to go through the backend proxy so the browser's
+    # localhost Referer is never sent to the CDN (which now 429s it). See the
+    # media-proxy header above for the full explanation.
+    hls_list = data.get("hls", []) or []
+    dash_list = data.get("dash", []) or []
+    streams, hls_list, dash_list = _proxify_streams(request, streams, hls_list, dash_list)
     return {
         "subject_id": subject_id,
         "se": se,
         "ep": ep,
         "has_resource": has_resource,
         "sources": streams,
-        "hls": data.get("hls", []),
-        "dash": data.get("dash", []),
+        "hls": hls_list,
+        "dash": dash_list,
         "free_episodes": data.get("freeNum"),
         "limited": data.get("limited", False),
         "note": None if has_resource else "No stream found for this episode."
@@ -703,7 +726,18 @@ async def get_captions(request: Request, subject_id: str, detail_path: str, se: 
     return {"subject_id": subject_id, "se": se, "ep": ep, "count": len(captions), "captions": captions}
 
 
-# ---------------------------------------------------------------- HLS PROXY
+# ---------------------------------------------------------------- MEDIA PROXY
+# Why we proxy at all (and why MP4 needs it now):
+# The CDN (bcdn* / hakunaymatata etc.) now enforces Referer checking:
+#   Referer: https://moviebox.ph/ or https://mzfi.me/ -> 200
+#   Referer: http://localhost:5173/ or empty              -> 429
+# The browser's <video> sends Referer = page origin (localhost) and JS
+# cannot override the forbidden `Referer` header, so a direct <video src>
+# to the signed CDN mp4 always gets a 429 HTML page -> MEDIA_ERR_SRC_NOT_SUPPORTED
+# ("Format error"). The fix is to pipe the bytes through our backend with
+# the correct Referer/Origin + forwarded residential IP, and with Range
+# passthrough so seeking still works. HLS segments had the same issue but
+# were already proxied for CORS; MP4 was direct and is now also proxied.
 # Older iOS Safari (<= iOS 16) cannot play fMP4/CMAF HLS natively and rejects
 # it with MEDIA_ERR_SRC_NOT_SUPPORTED, while newer iOS/macOS play it fine.
 # hls.js CAN play fMP4 on old iOS via MSE, but MSE segment fetches require
@@ -713,13 +747,60 @@ async def get_captions(request: Request, subject_id: str, detail_path: str, se: 
 # keys point back at these proxy routes.
 _HLS_PROXY_PATH = "/api/proxy/hls"
 _SEGMENT_PROXY_PATH = "/api/proxy/seg"
+_MP4_PROXY_PATH = "/api/proxy/mp4"
 
 
 def _encode_proxy_url(target: str) -> str:
-    # Child playlists (.m3u8) recurse through the manifest proxy; everything
-    # else (segments, keys, subtitles) goes through the segment proxy.
-    path = _HLS_PROXY_PATH if ".m3u8" in target else _SEGMENT_PROXY_PATH
+    # Child playlists (.m3u8) recurse through the manifest proxy; mp4 files
+    # go through the mp4 proxy (range-aware); everything else (segments,
+    # keys, subtitles) goes through the segment proxy.
+    if ".m3u8" in target:
+        path = _HLS_PROXY_PATH
+    elif ".mp4" in target or ".m4s" in target or target.endswith(".mp4") or ".mp4?" in target:
+        path = _MP4_PROXY_PATH
+    else:
+        path = _SEGMENT_PROXY_PATH
     return f"{path}?u={urllib.parse.quote(target, safe='')}"
+
+
+def _abs_proxy_url(request: Request, target: str) -> str:
+    """Turn a CDN url into an absolute proxy url on this backend's origin.
+    The frontend may be on a different origin (5173 vs 8000, or Vercel vs
+    Render), so an absolute backend URL is required — a relative
+    `/api/proxy/...` would hit the frontend host and 404. We build it from
+    request.base_url which reflects the Host header the client used."""
+    base = str(request.base_url).rstrip("/")
+    return f"{base}{_encode_proxy_url(target)}"
+
+
+def _should_proxy(url: str | None) -> bool:
+    if not url:
+        return False
+    # Don't double-proxy
+    if url.startswith(_HLS_PROXY_PATH) or url.startswith(_SEGMENT_PROXY_PATH) or url.startswith(_MP4_PROXY_PATH):
+        return False
+    # Proxy all CDN media urls; local blob: urls are untouched.
+    if url.startswith("blob:") or url.startswith("data:"):
+        return False
+    return url.startswith("http://") or url.startswith("https://")
+
+
+def _proxify_streams(request: Request, streams: list[dict], hls: list[dict], dash: list[dict]):
+    """Rewrite every CDN media url in-place to go through the backend proxy
+    with the correct Referer + forwarded IP. Mutates the passed lists."""
+    for s in streams:
+        u = s.get("url")
+        if _should_proxy(u):
+            s["url"] = _abs_proxy_url(request, u)
+    for h in hls:
+        u = h.get("url")
+        if _should_proxy(u):
+            h["url"] = _abs_proxy_url(request, u)
+    for d in dash:
+        u = d.get("url")
+        if _should_proxy(u):
+            d["url"] = _abs_proxy_url(request, u)
+    return streams, hls, dash
 
 
 def _rewrite_manifest(body: str, base_url: str) -> str:
@@ -732,7 +813,7 @@ def _rewrite_manifest(body: str, base_url: str) -> str:
         inner = m.group(1)
         if inner.startswith(("http://", "https://")):
             return f'URI="{_encode_proxy_url(inner)}"'
-        if inner.startswith((_HLS_PROXY_PATH, _SEGMENT_PROXY_PATH)):
+        if inner.startswith((_HLS_PROXY_PATH, _SEGMENT_PROXY_PATH, _MP4_PROXY_PATH)):
             return m.group(0)
         return f'URI="{_encode_proxy_url(urllib.parse.urljoin(base_url, inner))}"'
 
@@ -747,78 +828,185 @@ def _rewrite_manifest(body: str, base_url: str) -> str:
         else:
             if s.startswith(("http://", "https://")):
                 out.append(_encode_proxy_url(s))
-            elif s.startswith((_HLS_PROXY_PATH, _SEGMENT_PROXY_PATH)):
+            elif s.startswith((_HLS_PROXY_PATH, _SEGMENT_PROXY_PATH, _MP4_PROXY_PATH)):
                 out.append(s)
             else:
                 out.append(_encode_proxy_url(urllib.parse.urljoin(base_url, s)))
     return "\n".join(out) + "\n"
 
 
-@app.get(_HLS_PROXY_PATH)
-async def proxy_hls(u: str = Query(..., description="Absolute HLS manifest URL")):
-    headers = {
-        **PLAYER_HEADERS,
-        "Referer": "https://moviebox.ph/",
-        "Origin": "https://moviebox.ph",
-        "Accept": "*/*",
+async def _proxy_stream(request: Request, target_url: str, *, is_manifest: bool = False):
+    """Generic CDN streaming proxy: forwards the caller's Range (if any),
+    spoofs Referer/Origin so the CDN sees `moviebox.ph`, and forwards the
+    caller's residential IP via X-Forwarded-For so hosted backends still get
+    geo-unlocked streams. Streams the response body chunk-by-chunk so large
+    mp4s don't buffer fully in RAM."""
+    ip = _client_ip(request)
+    # Media CDN (bcdn* / hakunaymatata) only needs a browser-like
+    # Referer/Origin + Range. Sending API headers like X-Client-Info,
+    # sec-ch-ua, Cache-Control etc. as we do for the JSON play API
+    # makes the video edge treat the request as suspicious and it
+    # closes the TCP mid-body for ranges >1KB (seen as
+    # `peer closed without sending complete body` at 0 bytes for
+    # `bytes=0-1048575`). Keep media headers minimal — just what a
+    # real <video> would send.
+    if is_manifest:
+        base_headers = {
+            **PLAYER_HEADERS,
+            **_geo_headers(ip),
+            "Referer": "https://moviebox.ph/",
+            "Origin": "https://moviebox.ph",
+            "Accept": "*/*",
+        }
+    else:
+        base_headers = {
+            "User-Agent": PLAYER_HEADERS["User-Agent"],
+            **_geo_headers(ip),
+            "Referer": "https://moviebox.ph/",
+            "Origin": "https://moviebox.ph",
+            "Accept": "*/*",
+            "Accept-Encoding": "identity",
+            "Connection": "keep-alive",
+        }
+    headers = base_headers
+    # Forward Range for seeking (video element sends `Range: bytes=...`)
+    range_hdr = request.headers.get("range")
+    if range_hdr:
+        headers["Range"] = range_hdr
+    # For manifests, preserve a couple of client hints that help with
+    # CORS; for media we keep it minimal to avoid triggering the WAF.
+    if is_manifest:
+        for h in ("accept", "accept-language"):
+            v = request.headers.get(h)
+            if v and h.lower() not in (k.lower() for k in headers):
+                headers[h] = v
+
+    # Large mp4s need a long read window — the CDN streams 100-500MB.
+    # httpx.Timeout(60) would kill a slow 91% buffered stream.
+    if is_manifest:
+        timeout_cfg = httpx.Timeout(10, read=30)
+    else:
+        timeout_cfg = httpx.Timeout(10, read=300, write=60, pool=10)
+    # Manifests and small text are buffered — safe to use a short-lived client.
+    if is_manifest:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=timeout_cfg) as client:
+            r = await client.get(target_url, headers=headers)
+            if r.status_code != 200:
+                raise HTTPException(status_code=r.status_code, detail="Upstream manifest error")
+            text = _rewrite_manifest(r.text, target_url)
+            return Response(
+                content=text,
+                media_type="application/vnd.apple.mpegurl",
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Headers": "*",
+                    "Access-Control-Expose-Headers": "Content-Range, Content-Length, Accept-Ranges",
+                    "Cache-Control": "no-store",
+                },
+            )
+    is_text = any(x in target_url.lower() for x in (".srt", ".vtt", ".smi"))
+    if is_text and not range_hdr:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=timeout_cfg) as client:
+            r = await client.get(target_url, headers=headers)
+            return Response(
+                content=r.content,
+                status_code=r.status_code,
+                media_type=r.headers.get("content-type", "text/plain"),
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Cache-Control": "no-store",
+                },
+            )
+    # Media bytes (mp4 / m4s / segments / keys): stream with Range passthrough.
+    # The upstream response must stay open for the duration of the
+    # StreamingResponse, so we cannot use `async with AsyncClient` here —
+    # that would close the client (and the upstream TCP) before the first
+    # chunk is yielded (seen as `peer closed without sending complete body`
+    # with 0 bytes for any range >1KB, which is exactly the 91% stall).
+    # Instead we create a client that lives until the iterator finishes.
+    client = httpx.AsyncClient(follow_redirects=True, timeout=timeout_cfg)
+    try:
+        upstream = await client.send(
+            client.build_request("GET", target_url, headers=headers), stream=True
+        )
+    except Exception:
+        await client.aclose()
+        raise
+    status = upstream.status_code
+    # Non-200/206 from CDN (e.g. 429, 403) should surface as-is so the
+    # player can failover; the caller decides retry vs next source.
+    # For errors we can close immediately and return the error body buffered.
+    if status not in (200, 206):
+        # Buffer the error HTML so we don't leak the streaming client.
+        body = await upstream.aread()
+        await upstream.aclose()
+        await client.aclose()
+        return Response(
+            content=body,
+            status_code=status,
+            media_type=upstream.headers.get("content-type", "text/html"),
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Cache-Control": "no-store",
+            },
+        )
+    ctype = upstream.headers.get("content-type", "application/octet-stream")
+    accept_ranges = upstream.headers.get("accept-ranges", "bytes")
+    content_length = upstream.headers.get("content-length")
+    content_range = upstream.headers.get("content-range")
+
+    async def _iter():
+        try:
+            async for chunk in upstream.aiter_bytes(chunk_size=256 * 1024):
+                yield chunk
+        finally:
+            await upstream.aclose()
+            await client.aclose()
+
+    resp_headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Range, Content-Type",
+        "Access-Control-Expose-Headers": "Content-Range, Content-Length, Accept-Ranges, Content-Type",
+        "Accept-Ranges": accept_ranges,
+        "Cache-Control": "no-store",
+        "Content-Type": ctype,
     }
-    async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
-        r = await client.get(u, headers=headers)
-        if r.status_code != 200:
-            raise HTTPException(status_code=r.status_code, detail="Upstream manifest error")
-        text = _rewrite_manifest(r.text, u)
-    return Response(
-        content=text,
-        media_type="application/vnd.apple.mpegurl",
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Cache-Control": "no-store",
-        },
+    if content_range:
+        resp_headers["Content-Range"] = content_range
+    if content_length:
+        resp_headers["Content-Length"] = content_length
+    return StreamingResponse(
+        _iter(),
+        status_code=status,
+        headers=resp_headers,
+        media_type=ctype,
     )
+
+
+@app.get(_HLS_PROXY_PATH)
+async def proxy_hls(request: Request, u: str = Query(..., description="Absolute HLS manifest URL")):
+    return await _proxy_stream(request, u, is_manifest=True)
 
 
 @app.get(_SEGMENT_PROXY_PATH)
 async def proxy_seg(request: Request, u: str = Query(..., description="Absolute segment/key URL")):
-    headers = {
-        **PLAYER_HEADERS,
-        "Referer": "https://moviebox.ph/",
-        "Origin": "https://moviebox.ph",
-        "Accept": "*/*",
-    }
-    range_hdr = request.headers.get("range")
-    if range_hdr:
-        headers["Range"] = range_hdr
-    async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
-        upstream = await client.send(
-            client.build_request("GET", u, headers=headers), stream=True
-        )
-        status = upstream.status_code
-        ctype = upstream.headers.get("content-type", "application/octet-stream")
-        accept_ranges = upstream.headers.get("accept-ranges", "bytes")
-        content_length = upstream.headers.get("content-length")
-        content_range = upstream.headers.get("content-range")
+    return await _proxy_stream(request, u, is_manifest=False)
 
-        async def _iter():
-            async for chunk in upstream.aiter_bytes(chunk_size=256 * 1024):
-                yield chunk
-            await upstream.aclose()
 
-        resp_headers = {
-            "Access-Control-Allow-Origin": "*",
-            "Accept-Ranges": accept_ranges,
-            "Cache-Control": "no-store",
-            "Content-Type": ctype,
-        }
-        if content_range:
-            resp_headers["Content-Range"] = content_range
-        if content_length:
-            resp_headers["Content-Length"] = content_length
-        return StreamingResponse(
-            _iter(),
-            status_code=status,
-            headers=resp_headers,
-            media_type=ctype,
-        )
+@app.get(_MP4_PROXY_PATH)
+async def proxy_mp4(request: Request, u: str = Query(..., description="Absolute media file URL (mp4/m4s)")):
+    return await _proxy_stream(request, u, is_manifest=False)
+
+
+# Allow HEAD for MP4 probing (some players / devtools issue HEAD first)
+@app.api_route(_MP4_PROXY_PATH, methods=["HEAD"])
+async def proxy_mp4_head(request: Request, u: str = Query(..., description="Absolute media file URL")):
+    return await _proxy_stream(request, u, is_manifest=False)
+
+
+@app.api_route(_SEGMENT_PROXY_PATH, methods=["HEAD"])
+async def proxy_seg_head(request: Request, u: str = Query(..., description="Absolute segment URL")):
+    return await _proxy_stream(request, u, is_manifest=False)
 
 
 # ---------------------------------------------------------------- SPA
