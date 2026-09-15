@@ -1,5 +1,5 @@
 {
-  "name": "Mellow Movies — Stream Movies & Shows",
+  "name": "Mellow Movies | Stream Movies & Shows",
   "short_name": "Mellow",
   "description": "Free movies & shows, beautifully delivered. Continue watching, My List, and real posters.",
   "start_url": "/",
@@ -16,7 +16,7 @@
       "purpose": "any"
     },
     {
-      "src": "/icon-192.png",
+      "src": "/favicon.svg",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"

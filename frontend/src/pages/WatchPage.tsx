@@ -5,7 +5,7 @@ import {
   Link,
   useSearchParams,
 } from "react-router-dom";
-import { FaStar, FaArrowUpRightFromSquare } from "react-icons/fa6";
+import { FaStar, FaArrowUpRightFromSquare, FaDownload } from "react-icons/fa6";
 import {
   fetchCaptions,
   fetchCatalog,
@@ -344,7 +344,12 @@ function WatchContent({ item }: { item: MediaItem }) {
     const url = params.toString() ? `${base}?${params}` : base;
     try {
       await navigator.clipboard.writeText(url);
-      showToast("Link copied", { message: t > 1 ? `Starts at ${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}` : item.title });
+      showToast("Link copied", {
+        message:
+          t > 1
+            ? `Starts at ${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`
+            : item.title,
+      });
     } catch {
       showToast("Share link", { message: url, duration: 6000 });
     }
@@ -365,7 +370,10 @@ function WatchContent({ item }: { item: MediaItem }) {
     document.body.appendChild(a);
     a.click();
     a.remove();
-    showToast("Download started", { message: "If it fails, try another quality", duration: 3000 });
+    showToast("Download started", {
+      message: "If it fails, try another quality",
+      duration: 3000,
+    });
   };
 
   // Flush the latest position when switching episodes / leaving the page —
@@ -436,9 +444,7 @@ function WatchContent({ item }: { item: MediaItem }) {
     <StreamPlayer
       key={playerKey}
       view={view}
-      onToggleView={() =>
-        setView((v) => (v === "wide" ? "boxed" : "wide"))
-      }
+      onToggleView={() => setView((v) => (v === "wide" ? "boxed" : "wide"))}
       srcs={streamSrcs}
       srcLabels={streamLabels}
       poster={item.poster}
@@ -454,34 +460,33 @@ function WatchContent({ item }: { item: MediaItem }) {
     />
   );
 
-  const playerArea =
-    loadingStream ? (
-      <div className="relative aspect-video w-full bg-black">
-        <BufferingIndicator />
-      </div>
-    ) : streamError || streamSrcs.length === 0 ? (
-      <div className="flex aspect-video w-full flex-col items-center justify-center gap-4 bg-black px-6 text-center">
-        <p className="max-w-sm text-lg text-soft">
-          Stream unavailable for this title right now.
-        </p>
-        <p className="max-w-md text-sm text-soft/70">
-          The source is temporarily down, overloaded, or rate-limited on our
-          end. You can try again shortly, or watch it on a mirror site that
-          serves the same media with fewer ads.
-        </p>
-        <a
-          href="https://movibox.net"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 font-bold text-white transition hover:bg-primary/80"
-        >
-          <FaArrowUpRightFromSquare className="h-4 w-4" />
-          Watch on Movibox
-        </a>
-      </div>
-    ) : (
-      viewToggle
-    );
+  const playerArea = loadingStream ? (
+    <div className="relative aspect-video w-full bg-black">
+      <BufferingIndicator />
+    </div>
+  ) : streamError || streamSrcs.length === 0 ? (
+    <div className="flex aspect-video w-full flex-col items-center justify-center gap-4 bg-black px-6 text-center">
+      <p className="max-w-sm text-lg text-soft">
+        Stream unavailable for this title right now.
+      </p>
+      <p className="max-w-md text-sm text-soft/70">
+        The source is temporarily down, overloaded, or rate-limited on our end.
+        You can try again shortly, or watch it on a mirror site that serves the
+        same media with fewer ads.
+      </p>
+      <a
+        href="https://movibox.net"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 font-bold text-white transition hover:bg-primary/80"
+      >
+        <FaArrowUpRightFromSquare className="h-4 w-4" />
+        Watch on Movibox
+      </a>
+    </div>
+  ) : (
+    viewToggle
+  );
 
   const actionBar = (
     <div className="mt-5 flex flex-wrap gap-3">
@@ -491,8 +496,7 @@ function WatchContent({ item }: { item: MediaItem }) {
         title="Copy link with timestamp"
       >
         <FaArrowUpRightFromSquare className="h-3.5 w-3.5" />
-        Share at {Math.floor((currentPos || lastProgressRef.current?.position || 0) / 60)}:
-        {String(Math.floor((currentPos || lastProgressRef.current?.position || 0) % 60)).padStart(2, "0")}
+        Share
       </button>
       <button
         onClick={handleDownload}
@@ -500,11 +504,14 @@ function WatchContent({ item }: { item: MediaItem }) {
         className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
         title="Download current quality via proxy"
       >
-        ↓ Download {streamLabels[0] || "MP4"}
+        <FaDownload className="h-3.5 w-3.5" />
+        Download {streamLabels[0] || "MP4"}
       </button>
       <button
         onClick={() => {
-          setReportError(`Stopped at ${Math.floor(currentPos || 0)}s, player error`);
+          setReportError(
+            `Stopped at ${Math.floor(currentPos || 0)}s, player error`,
+          );
           setReportOpen(true);
         }}
         className="inline-flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-400 hover:bg-red-500/20"
