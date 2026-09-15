@@ -11,6 +11,7 @@ import {
   fetchCatalog,
   fetchDetail,
   fetchStream,
+  proxifyMediaUrl,
   type ApiCaption,
 } from "../api/client";
 import { mapApiItems, mapDetail } from "../api/media";
@@ -202,43 +203,50 @@ function WatchContent({ item }: { item: MediaItem }) {
           );
         const srcs: string[] = [];
         const labels: string[] = [];
+        // All CDN urls are proxied through the backend so the browser's
+        // localhost Referer never hits the CDN (which now 429s it). See
+        // backend/api.py -> _proxy_stream for the full story.
+        const toProxy = (u: string) => proxifyMediaUrl(u);
         // Safari / iOS play HLS natively — prefer it (then plain MP4) over
         // DASH, whose MVC/MSE path is unreliable there. Everywhere else DASH
         // stays first (moviebox's native, highest-quality path).
         if (supportsNativeHls) {
           if (hlsUrl) {
-            srcs.push(hlsUrl);
+            srcs.push(toProxy(hlsUrl));
             labels.push("HLS");
           }
           mp4s.forEach((s) => {
-            srcs.push(s.url);
+            srcs.push(toProxy(s.url));
             labels.push(s.resolution);
           });
           if (dashEntry) {
-            srcs.push(dashEntry.url);
+            srcs.push(toProxy(dashEntry.url));
             labels.push(
               `DASH${dashEntry.resolutions ? ` · ${dashEntry.resolutions}` : ""}`,
             );
           }
         } else {
           if (dashEntry) {
-            srcs.push(dashEntry.url);
+            srcs.push(toProxy(dashEntry.url));
             labels.push(
               `DASH${dashEntry.resolutions ? ` · ${dashEntry.resolutions}` : ""}`,
             );
           }
           if (hlsUrl) {
-            srcs.push(hlsUrl);
+            srcs.push(toProxy(hlsUrl));
             labels.push("HLS");
           }
           mp4s.forEach((s) => {
-            srcs.push(s.url);
+            srcs.push(toProxy(s.url));
             labels.push(s.resolution);
           });
         }
 
         // The moviebox API serves SRT subtitles; convert each to a WebVTT
         // blob URL so the browser's native <track> can actually play it.
+        // Captions live on cacdn.hakunaymatata.com (CloudFront) which does
+        // NOT enforce Referer (unlike the mp4 CDN), so a direct fetch from
+        // localhost works. Keep it direct to avoid proxying small text.
         const tracks: Array<{ lang: string; label: string; src: string }> = [];
         for (const t of mapCaptions(caps.captions)) {
           try {

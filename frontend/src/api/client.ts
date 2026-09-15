@@ -332,3 +332,39 @@ export const fetchCaptions = (
   );
 
 export const API_BASE_URL = API_BASE;
+
+/**
+ * Turn a raw CDN media URL into a backend-proxied URL so the browser's
+ * `localhost` Referer is never sent to the CDN (which now 429s it).
+ * The backend proxy forwards with `Referer: https://moviebox.ph/` + the
+ * caller's residential IP and streams bytes with Range passthrough.
+ * Already-proxied or blob: urls are returned as-is.
+ */
+export function proxifyMediaUrl(url: string): string {
+  if (!url) return url;
+  if (url.startsWith("blob:") || url.startsWith("data:")) return url;
+  if (url.includes("/api/proxy/")) {
+    // Already proxied — make it absolute to the backend if it was relative
+    if (url.startsWith("/")) return `${API_BASE}${url}`;
+    return url;
+  }
+  if (!url.startsWith("http://") && !url.startsWith("https://")) return url;
+  const isHls = /\.m3u8(?:\?|$)/i.test(url);
+  const proxyPath = isHls ? "/api/proxy/hls" : "/api/proxy/mp4";
+  return `${API_BASE}${proxyPath}?u=${encodeURIComponent(url)}`;
+}
+
+/**
+ * Same as proxifyMediaUrl but forces the segment proxy (for srt/vtt
+ * subtitle files which are not .m3u8/.mp4 and would otherwise go to /mp4).
+ */
+export function proxifyCaptionUrl(url: string): string {
+  if (!url) return url;
+  if (url.startsWith("blob:") || url.startsWith("data:")) return url;
+  if (url.includes("/api/proxy/")) {
+    if (url.startsWith("/")) return `${API_BASE}${url}`;
+    return url;
+  }
+  if (!url.startsWith("http://") && !url.startsWith("https://")) return url;
+  return `${API_BASE}/api/proxy/seg?u=${encodeURIComponent(url)}`;
+}

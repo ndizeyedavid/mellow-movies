@@ -25,6 +25,7 @@ import PlayerControls, {
 import { isTauri, onMediaKey, toggleMiniPlayer } from "../../desktopBridge";
 import { supportsNativeHls } from "../../utils/media";
 import { loadSubtitlePref, saveSubtitlePref } from "../../utils/subtitlePref";
+import { API_BASE_URL } from "../../api/client";
 
 // Retry delays (ms) before retrying the same source. Transient CDN limits
 // (429/5xx) usually clear within a couple of seconds, so a bounded retry
@@ -412,11 +413,19 @@ export default function StreamPlayer({
         }
       });
 
-      // When this is the iOS fallback, load through our same-origin proxy so
-      // MSE can fetch the fMP4 segments without depending on CDN CORS headers.
-      hls.loadSource(
-        useHlsFallback ? `/api/proxy/hls?u=${encodeURIComponent(src)}` : src,
-      );
+      // When this is the iOS fallback, load through our backend proxy so
+      // MSE can fetch the fMP4 segments without depending on CDN CORS headers
+      // AND with the correct Referer (CDN now 429s localhost). See
+      // backend/api.py -> _proxy_stream. Use API_BASE_URL so it works both
+      // in mono mode (same origin) and dev mode (5173 vs 8000).
+      // Also, if the src is already a proxied URL, use it as-is (WatchPage
+      // now proxifies). Otherwise build a proxied fallback URL.
+      const proxiedSrc = src.includes("/api/proxy/")
+        ? src.startsWith("/")
+          ? `${API_BASE_URL}${src}`
+          : src
+        : `${API_BASE_URL}/api/proxy/hls?u=${encodeURIComponent(src)}`;
+      hls.loadSource(useHlsFallback ? proxiedSrc : src);
       hls.attachMedia(video);
 
       return () => {
