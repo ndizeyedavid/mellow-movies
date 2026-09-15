@@ -2,7 +2,7 @@
    API (localhost:8000) and CDN stream requests are left to the network:
    they're cross-origin and stream URLs expire, so never cache them. */
 
-const CACHE = "mellow-v3";
+const CACHE = "mellow-v4";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -39,36 +39,54 @@ self.addEventListener("fetch", (event) => {
   if (isStreamHost) {
     // Don't forward the original Referer/Origin — let the `referrer`
     // option set it to moviebox.ph. Forward only Range/Accept.
+    // Use the original request's mode (video is no-cors) so CORS is not
+    // required for 206. For 429 the CDN omits CORS headers, which would
+    // make a cors fetch fail with a CORS error instead of a 429 Response.
     const headers = new Headers();
     if (request.headers.has("Range")) headers.set("Range", request.headers.get("Range"));
     if (request.headers.has("Accept")) headers.set("Accept", request.headers.get("Accept"));
-    // Some CDNs also check User-Agent, but the browser sets it automatically.
     event.respondWith(
-      fetch(request.url, {
-        method: "GET",
-        headers,
-        referrer: "https://moviebox.ph/",
-        referrerPolicy: "unsafe-url",
-        mode: "cors",
-        credentials: "omit",
-        redirect: "follow",
-      })
-        .then((r) => {
-          // If CDN still rate-limits (429), retry once without Range
-          // coalescing — some edges 429 on too many parallel Ranges.
-          if (r.status === 429) {
-            return new Promise((res) => setTimeout(() => res(fetch(request.url, {
+      (async () => {
+        const fetchOpts = {
+          method: "GET",
+          headers,
+          referrer: "https://moviebox.ph/",
+          referrerPolicy: "unsafe-url",
+          mode: request.mode,
+          credentials: request.credentials,
+          redirect: "follow",
+          cache: "no-store",
+        };
+        try {
+          const r = await fetch(request.url, fetchOpts);
+          // Opaque no-cors responses have status 0 and type opaque — can't
+          // check status, just return it; the video element will handle it.
+          // For cors 206, check for 429 and retry with backoff.
+          if (r.type !== "opaque" && r.status === 429) {
+            await new Promise((res) => setTimeout(res, 1200));
+            return fetch(request.url, fetchOpts);
+          }
+          return r;
+        } catch (e) {
+          // CORS-blocked 429 (no Access-Control-Allow-Origin) lands here.
+          // Retry with no-cors so the video can at least get the bytes
+          // (opaque) and we avoid the CORS error in console.
+          try {
+            return await fetch(request.url, {
               method: "GET",
               headers,
               referrer: "https://moviebox.ph/",
               referrerPolicy: "unsafe-url",
-              mode: "cors",
+              mode: "no-cors",
               credentials: "omit",
-            })), 800));
+              redirect: "follow",
+              cache: "no-store",
+            });
+          } catch {
+            return fetch(request);
           }
-          return r;
-        })
-        .catch(() => fetch(request)),
+        }
+      })(),
     );
     return;
   }
