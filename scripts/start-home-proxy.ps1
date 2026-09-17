@@ -1,147 +1,142 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-  Start a local forward proxy (your residential IP) and expose it via Cloudflare Tunnel or ngrok.
-  Your fastapicloud backend will use it as top priority — when you're online movies egress via YOUR home
-  (free, unlimited). When you close this, backend auto-falls back to RESIDENTIAL_PROXY (your 3 free webshares)
-  with zero movie stop.
+  Start the Mellow home relay (your residential IP) and expose it via tunnel.
+  Backend uses it as top priority; close this to auto-fallback to webshares.
 
-  NEW: No manual paste after reboot — this script auto-pushes the fresh tunnel URL to the backend's
-  /api/admin/home-tunnel (dynamic). You just double-click and keep the window open.
-
-.DESCRIPTION
-  1. Starts a tiny HTTP forward proxy on 127.0.0.1:8899 (via `proxy.py`)
-  2. Starts cloudflared quick tunnel (trycloudflare) OR ngrok if --UseNgrok
-  3. Auto-POSTs the public https://xxx.trycloudflare.com URL to the backend
+  Relay (NOT forward proxy): python scripts/home-relay.py on 127.0.0.1:8900
+  exposes GET /health and GET /fetch?u=<cdn>. Cloudflare/ngrok tunnels forward
+  plain HTTP, so no CONNECT is needed (forward proxy.py via tunnel is blocked
+  by Cloudflare's HTTP edge).
 
 .USAGE
-  .\scripts\start-home-proxy.ps1                          # cloudflared trycloudflare (random, auto-pushed)
-  .\scripts\start-home-proxy.ps1 -UseNgrok                # ngrok static domain (sign up once: ngrok http 8899)
+  .\scripts\start-home-proxy.ps1                          # cloudflared trycloudflare (auto-pushed)
+  .\scripts\start-home-proxy.ps1 -UseNgrok                # ngrok http 8900 (needs: ngrok config add-authtoken)
   .\scripts\start-home-proxy.ps1 -Backend https://mellow-movies.fastapicloud.dev
-  .\scripts\start-home-proxy.ps1 -Port 8899 -NoInstall
+  .\scripts\start-home-proxy.ps1 -Port 8900
 #>
 param(
-  [int]$Port = 8899,
+  [int]$Port = 8900,
   [switch]$UseNgrok,
-  [string]$Backend = "https://mellow-movies.fastapicloud.dev",
-  [switch]$NoInstall
+  [string]$Backend = "https://mellow-movies.fastapicloud.dev"
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$RelayScript = Join-Path $ScriptDir "home-relay.py"
+$LogDir = Join-Path $env:TEMP "mellow-home"
+New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+$RelayLog = Join-Path $LogDir "relay.log"
+$TunnelLog = Join-Path $LogDir "tunnel.log"
+$TunnelErr = Join-Path $LogDir "tunnel_err.log"
 
-Write-Host "`n=== Mellow Home Proxy (residential) ===" -ForegroundColor Cyan
-Write-Host "Local proxy: 127.0.0.1:$Port  ->  Tunnel  ->  $Backend (auto-registered)`n" -ForegroundColor DarkGray
+Write-Host "`n=== Mellow Home Relay (residential) ===" -ForegroundColor Cyan
+Write-Host "Relay: 127.0.0.1:$Port (/health, /fetch) -> Tunnel -> $Backend (auto-registered)`n" -ForegroundColor DarkGray
 
-# 1. Ensure proxy.py
-if (-not $NoInstall) {
-  Write-Host "[1/3] Checking proxy.py..." -ForegroundColor Yellow
-  $hasProxy = $false
-  try { python -c "import proxy" 2>$null; if ($LASTEXITCODE -eq 0) { $hasProxy = $true } } catch {}
-  if (-not $hasProxy) {
-    Write-Host "      Installing proxy.py..." -ForegroundColor DarkGray
-    python -m pip install -q proxy.py
-    Write-Host "      Installed." -ForegroundColor Green
-  } else { Write-Host "      proxy.py already installed." -ForegroundColor Green }
-}
-
-# 2. Resolve tunnel binary
-$cfBin = (Get-Command cloudflared -ErrorAction SilentlyContinue)?.Source
-if (-not $cfBin -and (Test-Path "C:\Program Files (x86)\cloudflared\cloudflared.exe")) { $cfBin = "C:\Program Files (x86)\cloudflared\cloudflared.exe" }
-$ngBin = (Get-Command ngrok -ErrorAction SilentlyContinue)?.Source
-if (-not $ngBin) {
-  $ngBin = "$env:LOCALAPPDATA\Microsoft\WinGet\Links\ngrok.exe"
-  if (-not (Test-Path $ngBin)) { $ngBin = $null }
-}
-
-if ($UseNgrok -and -not $ngBin) {
-  Write-Host "      ngrok not found. Install: winget install Ngrok.Ngrok" -ForegroundColor Red
-  exit 1
-}
-if (-not $UseNgrok -and -not $cfBin) {
-  Write-Host "      cloudflared not found. Install: winget install Cloudflare.cloudflared" -ForegroundColor Red
-  exit 1
-}
-
-if ($UseNgrok) { Write-Host "[2/3] Using ngrok ($ngBin)" -ForegroundColor Green } else { Write-Host "[2/3] Using cloudflared ($cfBin)" -ForegroundColor Green }
-
-# 3. Start local forward proxy in background
-Write-Host "[3/3] Starting local forward proxy on :$Port ..." -ForegroundColor Yellow
-$proxyJob = Start-Job -Name mellow-proxy -ScriptBlock {
-  param($p) python -m proxy --port $p --hostname 127.0.0.1 --num-workers 4
-} -ArgumentList $Port
-Start-Sleep -Seconds 2
-if ($proxyJob.State -eq "Failed") {
-  Write-Host "      Proxy failed to start. Try: python -m proxy --port $Port" -ForegroundColor Red
-  Receive-Job $proxyJob -ErrorAction SilentlyContinue | Out-String | Write-Host
-  exit 1
-}
-try { $c = New-Object System.Net.Sockets.TcpClient; $c.Connect("127.0.0.1", $Port); $c.Close(); Write-Host "      Proxy listening on 127.0.0.1:$Port" -ForegroundColor Green } catch { Write-Host "      Proxy not yet listening, waiting..." -ForegroundColor Yellow; Start-Sleep -Seconds 2 }
-
-# Helper: auto-push tunnel URL to backend
 function Push-HomeTunnel($url) {
   if (-not $url) { return }
-  Write-Host "`n      Auto-registering $url -> $Backend/api/admin/home-tunnel" -ForegroundColor Cyan
+  Write-Host "Auto-registering $url -> $Backend/api/admin/home-tunnel" -ForegroundColor Cyan
   try {
     $body = @{ url = $url } | ConvertTo-Json -Compress
     $r = Invoke-RestMethod -Uri "$Backend/api/admin/home-tunnel" -Method Post -ContentType "application/json" -Body $body -TimeoutSec 12
-    Write-Host "      Registered: $($r | ConvertTo-Json -Compress)" -ForegroundColor Green
-    Write-Host "      Health: $Backend/health/proxy`n" -ForegroundColor DarkGray
+    Write-Host "Registered: $($r | ConvertTo-Json -Compress)" -ForegroundColor Green
   } catch {
-    Write-Host "      Auto-register failed: $_" -ForegroundColor Yellow
-    Write-Host "      Fallback: manually set HOME_TUNNEL_URL=$url on fastapicloud env, or just keep this window open and wait 5s and retry." -ForegroundColor DarkGray
+    Write-Host "Auto-register failed: $($_.Exception.Message)" -ForegroundColor Yellow
   }
+  Write-Host "Health: $Backend/health/proxy`n" -ForegroundColor DarkGray
 }
 
-Write-Host "`n=== Starting Tunnel (keep this window OPEN for home priority) ===" -ForegroundColor Cyan
-Write-Host "  Close this window to auto-fallback to webshares (5min cooldown, no movie stop).`n" -ForegroundColor Green
+function Wait-Port($port, $seconds) {
+  $deadline = (Get-Date).AddSeconds($seconds)
+  while ((Get-Date) -lt $deadline) {
+    try { $c = New-Object System.Net.Sockets.TcpClient; $c.Connect("127.0.0.1", $port); $c.Close(); return $true } catch {}
+    Start-Sleep -Milliseconds 500
+  }
+  return $false
+}
 
+function Wait-Pattern($file, $pattern, $seconds) {
+  $deadline = (Get-Date).AddSeconds($seconds)
+  while ((Get-Date) -lt $deadline) {
+    if (Test-Path $file) {
+      $txt = Get-Content $file -Raw -ErrorAction SilentlyContinue
+      if ($txt -and ($txt -match $pattern)) { return ([regex]::Match($txt, $pattern)).Value }
+    }
+    Start-Sleep -Milliseconds 500
+  }
+  return $null
+}
+
+# 1. Start relay (stdlib, no pip needed)
+Write-Host "[1/3] Starting home relay on :$Port ..." -ForegroundColor Yellow
+if (-not (Test-Path $RelayScript)) { Write-Host "Missing $RelayScript" -ForegroundColor Red; exit 1 }
+# free the port if a stale relay holds it
+try {
+  $conns = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+  foreach ($cc in $conns) { try { Stop-Process -Id $cc.OwningProcess -Force -ErrorAction SilentlyContinue; Write-Host "  Freed stale :$Port (pid $($cc.OwningProcess))" -ForegroundColor DarkGray } catch {} }
+} catch {}
+Start-Process -FilePath python -ArgumentList "`"$RelayScript`"","--port",$Port -RedirectStandardOutput $RelayLog -WindowStyle Hidden
+if (-not (Wait-Port $Port 10)) { Write-Host "Relay did not start in 10s. Log:" -ForegroundColor Red; Get-Content $RelayLog -Tail 20 | Write-Host; exit 1 }
+Write-Host "  Relay listening on 127.0.0.1:$Port" -ForegroundColor Green
+try {
+  $h = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/health" -TimeoutSec 5
+  Write-Host "  Relay /health: $($h | ConvertTo-Json -Compress)" -ForegroundColor Green
+} catch { Write-Host "  Relay /health failed: $($_.Exception.Message)" -ForegroundColor Yellow }
+
+# 2. Start tunnel with bounded wait (no endless hangs)
 if ($UseNgrok) {
-  Write-Host "  Starting ngrok http $Port (free static domain if you ran: ngrok config add-authtoken <token>)`n" -ForegroundColor White
-  # ngrok logs to stderr, but we can get public URL via API after it starts
-  $ngJob = Start-Job -Name mellow-ngrok -ScriptBlock {
-    param($p, $bin) & $bin http $p --log stdout 2>&1
-  } -ArgumentList $Port, $ngBin
+  $ngBin = (Get-Command ngrok -ErrorAction SilentlyContinue)?.Source
+  if (-not $ngBin) { $ngBin = "$env:LOCALAPPDATA\Microsoft\WinGet\Links\ngrok.exe" }
+  if (-not (Test-Path $ngBin)) { Write-Host "ngrok not found. Run: winget install Ngrok.Ngrok" -ForegroundColor Red; exit 1 }
+  Write-Host "[2/3] Starting ngrok http $Port (timeout 25s for URL) ..." -ForegroundColor Yellow
+  Remove-Item $TunnelLog, $TunnelErr -ErrorAction SilentlyContinue
+  Start-Process -FilePath $ngBin -ArgumentList "http",$Port,"--log","stdout" -RedirectStandardOutput $TunnelLog -RedirectStandardError $TunnelErr -WindowStyle Hidden
   Start-Sleep -Seconds 4
-  # Poll ngrok API for public URL
-  $tries = 0; $pubUrl = $null
-  while ($tries -lt 20 -and -not $pubUrl) {
+  $pubUrl = $null; $tries = 0
+  while ($tries -lt 6 -and -not $pubUrl) {
     try {
       $api = Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels" -TimeoutSec 3
       $pubUrl = ($api.tunnels | Where-Object { $_.public_url -like "https://*" } | Select-Object -First 1).public_url
-      if ($pubUrl) { Write-Host "  ngrok URL: $pubUrl" -ForegroundColor Cyan; Push-HomeTunnel $pubUrl; break }
     } catch {}
-    Start-Sleep -Seconds 1; $tries++
+    if (-not $pubUrl) { Start-Sleep -Seconds 2; $tries++ }
   }
-  if (-not $pubUrl) { Write-Host "  ngrok started but API not reachable. Check http://127.0.0.1:4040" -ForegroundColor Yellow }
-  Write-Host "  Forwarding to $pubUrl — press Ctrl+C to stop.`n" -ForegroundColor DarkGray
-  try { Receive-Job $ngJob -Wait -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_ } } finally {
-    Stop-Job $ngJob -ErrorAction SilentlyContinue | Out-Null; Remove-Job $ngJob -Force -ErrorAction SilentlyContinue | Out-Null
-    Stop-Job $proxyJob -ErrorAction SilentlyContinue | Out-Null; Remove-Job $proxyJob -Force -ErrorAction SilentlyContinue | Out-Null
-    Write-Host "`nngrok closed. Backend now falls back to webshares." -ForegroundColor Green
-  }
+  if (-not $pubUrl) { Write-Host "ngrok URL not captured in ~16s. Check http://127.0.0.1:4040" -ForegroundColor Red; exit 1 }
+  Write-Host "  ngrok URL: $pubUrl" -ForegroundColor Cyan
+  Push-HomeTunnel $pubUrl
 } else {
-  # cloudflared trycloudflare — capture URL from stderr and auto-push
-  Write-Host "  Starting cloudflared tunnel --url http://localhost:$Port (random trycloudflare, auto-pushed)`n" -ForegroundColor White
-  $cfJob = Start-Job -Name mellow-cf -ScriptBlock {
-    param($p, $bin) & $bin tunnel --url "http://localhost:$p" --no-autoupdate 2>&1
-  } -ArgumentList $Port, $cfBin
-  $pushed = $false
+  $cfBin = (Get-Command cloudflared -ErrorAction SilentlyContinue)?.Source
+  if (-not $cfBin -and (Test-Path "C:\Program Files (x86)\cloudflared\cloudflared.exe")) { $cfBin = "C:\Program Files (x86)\cloudflared\cloudflared.exe" }
+  if (-not (Test-Path $cfBin)) { Write-Host "cloudflared not found. Run: winget install Cloudflare.cloudflared" -ForegroundColor Red; exit 1 }
+  Write-Host "[2/3] Starting cloudflared quick tunnel (timeout 30s for URL) ..." -ForegroundColor Yellow
+  Remove-Item $TunnelLog, $TunnelErr -ErrorAction SilentlyContinue
+  Start-Process -FilePath $cfBin -ArgumentList "tunnel","--url","http://localhost:$Port","--no-autoupdate" -RedirectStandardOutput $TunnelLog -RedirectStandardError $TunnelErr -WindowStyle Hidden
+  $pubUrl = Wait-Pattern $TunnelErr "https://[a-z0-9-]+\.trycloudflare\.com" 30
+  if (-not $pubUrl) { $pubUrl = Wait-Pattern $TunnelLog "https://[a-z0-9-]+\.trycloudflare\.com" 5 }
+  if (-not $pubUrl) { Write-Host "Tunnel URL not captured in 30s. Tail:" -ForegroundColor Red; Get-Content $TunnelErr -Tail 10 | Write-Host; exit 1 }
+  Write-Host "  Tunnel URL: $pubUrl" -ForegroundColor Cyan
+  Push-HomeTunnel $pubUrl
+}
+
+Write-Host "[3/3] Verifying relay THROUGH tunnel (timeout 25s) ..." -ForegroundColor Yellow
+try {
+  $probe = Invoke-RestMethod -Uri "$pubUrl/health" -TimeoutSec 15
+  Write-Host "  Tunnel -> relay /health: $($probe | ConvertTo-Json -Compress)" -ForegroundColor Green
+} catch {
+  Write-Host "  Tunnel health check failed (tunnel may need 10s to propagate): $($_.Exception.Message)" -ForegroundColor Yellow
+}
+Write-Host "`nKeep this window OPEN for home priority. Close (Ctrl+C) to auto-fallback to webshares." -ForegroundColor Green
+Write-Host "Backend health: $Backend/health/proxy`n" -ForegroundColor DarkGray
+
+# Block until Ctrl+C, but with heartbeat: re-push every 5 min so backend never goes stale
+try {
+  while ($true) { Start-Sleep -Seconds 300; Push-HomeTunnel $pubUrl }
+} finally {
+  Write-Host "`nStopping relay + tunnel..." -ForegroundColor Yellow
   try {
-    while ($true) {
-      $out = Receive-Job $cfJob 2>&1 | Out-String
-      if ($out) {
-        Write-Host $out -NoNewline
-        if (-not $pushed -and $out -match "https://[a-z0-9-]+\.trycloudflare\.com") {
-          $m = [regex]::Match($out, "https://[a-z0-9-]+\.trycloudflare\.com")
-          if ($m.Success) { Push-HomeTunnel $m.Value; $pushed = $true }
-        }
-      }
-      if ($cfJob.State -eq "Completed" -or $cfJob.State -eq "Failed") { break }
-      Start-Sleep -Milliseconds 500
-    }
-  } finally {
-    Stop-Job $cfJob -ErrorAction SilentlyContinue | Out-Null; Remove-Job $cfJob -Force -ErrorAction SilentlyContinue | Out-Null
-    Stop-Job $proxyJob -ErrorAction SilentlyContinue | Out-Null; Remove-Job $proxyJob -Force -ErrorAction SilentlyContinue | Out-Null
-    Write-Host "`nTunnel closed. Backend now falls back to webshares." -ForegroundColor Green
-  }
+    $conns = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+    foreach ($cc in $conns) { try { Stop-Process -Id $cc.OwningProcess -Force -ErrorAction SilentlyContinue } catch {} }
+  } catch {}
+  Get-Process cloudflared -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+  Get-Process ngrok -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+  Write-Host "Done. Backend falls back to webshares." -ForegroundColor Green
 }

@@ -159,6 +159,51 @@ def _mark_proxy_failure(proxy: str | None) -> None:
         _proxy_failures[proxy] = time.monotonic()
 
 
+def _is_home_relay(url: str | None) -> bool:
+    """True if this pool entry is your home relay (Cloudflare/ngrok tunnel),
+    NOT a forward proxy. Home relays expose GET /fetch?u=<cdn> + /health and
+    must be fetched as plain HTTP (CONNECT via httpx `proxy=` is blocked by
+    Cloudflare's HTTP edge — seen as 'Name or service not known')."""
+    if not url:
+        return False
+    u = url.lower()
+    # Explicit home keys always count as relay even if custom domain
+    home_keys = ("HOME_PROXY_URL", "HOME_TUNNEL_URL", "HOME_TUNNEL_PROXY", "PRIMARY_PROXY")
+    for _k in home_keys:
+        _v = os.getenv(_k)
+        if _v and url in _parse_proxy_list(_v):
+            return True
+    if _home_dynamic_url and url == _home_dynamic_url:
+        return True
+    return any(
+        x in u
+        for x in (
+            ".trycloudflare.com",
+            ".ngrok-free.app",
+            ".ngrok.io",
+            ".loca.lt",
+            ".devtunnels.",
+        )
+    )
+
+
+async def _fetch_via_home_relay(
+    client: httpx.AsyncClient,
+    home_base: str,
+    target_url: str,
+    headers: dict,
+) -> httpx.Response:
+    """Fetch CDN bytes THROUGH your home relay: GET {home}/fetch?u=<cdn>
+    forwarding Range. The relay egresses via your residential IP. Returns the
+    relay's streaming response (client must stay open; caller streams it)."""
+    relay_url = home_base.rstrip("/") + "/fetch?u=" + urllib.parse.quote(target_url, safe="")
+    fwd_headers: dict = {}
+    if headers.get("Range"):
+        fwd_headers["Range"] = headers["Range"]
+    req = client.build_request("GET", relay_url, headers=fwd_headers)
+    return await client.send(req, stream=True)
+
+
 def _pick_healthy_proxy() -> str | None:
     """Pick the next proxy that is not in cooldown. HOME_TUNNEL_URL is always
     tried first (priority) when healthy; only then round-robin among fallbacks.
@@ -1105,12 +1150,16 @@ async def _proxy_stream(request: Request, target_url: str, *, is_manifest: bool 
     # Manifests and small text are buffered — safe to use a short-lived client.
     # Use residential proxy if configured (round-robin, auto skip on failure).
     if is_manifest:
-        _p_kwargs = {"follow_redirects": True, "timeout": timeout_cfg}
+        _p_kwargs: dict = {"follow_redirects": True, "timeout": timeout_cfg}
         _p = _pick_healthy_proxy()
-        if _p:
+        _p_is_relay = _is_home_relay(_p) if _p else False
+        if _p and not _p_is_relay:
             _p_kwargs["proxy"] = _p
         async with httpx.AsyncClient(**_p_kwargs) as client:
-            r = await client.get(target_url, headers=headers)
+            if _p_is_relay and _p:
+                r = await _fetch_via_home_relay(client, _p, target_url, headers)
+            else:
+                r = await client.get(target_url, headers=headers)
             if r.status_code != 200:
                 raise HTTPException(status_code=r.status_code, detail="Upstream manifest error")
             text = _rewrite_manifest(r.text, target_url)
@@ -1126,12 +1175,16 @@ async def _proxy_stream(request: Request, target_url: str, *, is_manifest: bool 
             )
     is_text = any(x in target_url.lower() for x in (".srt", ".vtt", ".smi"))
     if is_text and not range_hdr:
-        _t_kwargs = {"follow_redirects": True, "timeout": timeout_cfg}
+        _t_kwargs: dict = {"follow_redirects": True, "timeout": timeout_cfg}
         _t = _pick_healthy_proxy()
-        if _t:
+        _t_is_relay = _is_home_relay(_t) if _t else False
+        if _t and not _t_is_relay:
             _t_kwargs["proxy"] = _t
         async with httpx.AsyncClient(**_t_kwargs) as client:
-            r = await client.get(target_url, headers=headers)
+            if _t_is_relay and _t:
+                r = await _fetch_via_home_relay(client, _t, target_url, headers)
+            else:
+                r = await client.get(target_url, headers=headers)
             return Response(
                 content=r.content,
                 status_code=r.status_code,
@@ -1180,7 +1233,8 @@ async def _proxy_stream(request: Request, target_url: str, *, is_manifest: bool 
 
     for _proxy in _proxy_candidates:
         _client_kwargs = {"follow_redirects": True, "timeout": timeout_cfg}
-        if _proxy:
+        _is_relay = _is_home_relay(_proxy) if _proxy else False
+        if _proxy and not _is_relay:
             _client_kwargs["proxy"] = _proxy
         # (re)create client for this attempt
         if client is not None:
@@ -1189,11 +1243,16 @@ async def _proxy_stream(request: Request, target_url: str, *, is_manifest: bool 
             except Exception:
                 pass
         client = httpx.AsyncClient(**_client_kwargs)
-        tried_proxies.append(_proxy or "direct")
+        tried_proxies.append((_proxy or "direct") + (" [relay]" if _is_relay else ""))
         try:
-            upstream = await client.send(
-                client.build_request("GET", target_url, headers=headers), stream=True
-            )
+            if _is_relay and _proxy:
+                # Home relay: plain GET {home}/fetch?u=<cdn> (no CONNECT)
+                assert _proxy is not None
+                upstream = await _fetch_via_home_relay(client, _proxy, target_url, headers)
+            else:
+                upstream = await client.send(
+                    client.build_request("GET", target_url, headers=headers), stream=True
+                )
         except Exception as e:
             last_exc = e
             # Proxy connect/auth failures → mark and try next proxy
@@ -1368,26 +1427,33 @@ async def health_proxy():
         proxies.append({"proxy": _mask(p), "cooldown_remaining_s": remaining, "healthy": remaining == 0})
 
     probe: dict = {"attempted": False}
-    # Try a tiny range probe via the current healthy proxy
+    # Try a tiny range probe via the current healthy proxy.
+    # Home relays are probed via GET {home}/fetch?u=<probe> (plain HTTP,
+    # no CONNECT); forward proxies via httpx `proxy=`.
     probe_url = "https://bcdnxw.hakunaymatata.com/bt/640ff12864b2bb75b1a394e60ecb4d3c.mp4?sign=86d9e77c99cdb7d0c70404565d66387e&t=1789455866"
-    # Use the next healthy proxy if any; otherwise direct (will be 426)
     chosen = _pick_healthy_proxy()
+    chosen_is_relay = _is_home_relay(chosen) if chosen else False
     kwargs: dict = {"follow_redirects": True, "timeout": httpx.Timeout(10, read=15)}
-    if chosen:
+    if chosen and not chosen_is_relay:
         kwargs["proxy"] = chosen
     try:
         probe["attempted"] = True
-        probe["proxy"] = _mask(chosen) if chosen else "direct"
+        probe["proxy"] = (_mask(chosen) if chosen else "direct") + (" [relay]" if chosen_is_relay else "")
+        probe["relay"] = chosen_is_relay
         async with httpx.AsyncClient(**kwargs) as client:
-            r = await client.get(
-                probe_url,
-                headers={
-                    "User-Agent": PLAYER_HEADERS["User-Agent"],
-                    "Referer": "https://moviebox.ph/",
-                    "Origin": "https://moviebox.ph",
-                    "Range": "bytes=0-1023",
-                },
-            )
+            if chosen_is_relay and chosen:
+                fetch_url = chosen.rstrip("/") + "/fetch?u=" + urllib.parse.quote(probe_url, safe="")
+                r = await client.get(fetch_url, headers={"Range": "bytes=0-1023"})
+            else:
+                r = await client.get(
+                    probe_url,
+                    headers={
+                        "User-Agent": PLAYER_HEADERS["User-Agent"],
+                        "Referer": "https://moviebox.ph/",
+                        "Origin": "https://moviebox.ph",
+                        "Range": "bytes=0-1023",
+                    },
+                )
             probe["status"] = r.status_code
             probe["content_type"] = r.headers.get("content-type")
             probe["content_range"] = r.headers.get("content-range")
