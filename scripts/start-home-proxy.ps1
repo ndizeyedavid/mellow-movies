@@ -85,7 +85,9 @@ try {
 
 # 2. Start tunnel with bounded wait (no endless hangs)
 if ($UseNgrok) {
-  $ngBin = (Get-Command ngrok -ErrorAction SilentlyContinue)?.Source
+  $ngBin = $null
+  $ngCmd = Get-Command ngrok -ErrorAction SilentlyContinue
+  if ($ngCmd) { $ngBin = $ngCmd.Source }
   if (-not $ngBin) { $ngBin = "$env:LOCALAPPDATA\Microsoft\WinGet\Links\ngrok.exe" }
   if (-not (Test-Path $ngBin)) { Write-Host "ngrok not found. Run: winget install Ngrok.Ngrok" -ForegroundColor Red; exit 1 }
   Write-Host "[2/3] Starting ngrok http $Port (timeout 25s for URL) ..." -ForegroundColor Yellow
@@ -104,7 +106,9 @@ if ($UseNgrok) {
   Write-Host "  ngrok URL: $pubUrl" -ForegroundColor Cyan
   Push-HomeTunnel $pubUrl
 } else {
-  $cfBin = (Get-Command cloudflared -ErrorAction SilentlyContinue)?.Source
+  $cfBin = $null
+  $cfCmd = Get-Command cloudflared -ErrorAction SilentlyContinue
+  if ($cfCmd) { $cfBin = $cfCmd.Source }
   if (-not $cfBin -and (Test-Path "C:\Program Files (x86)\cloudflared\cloudflared.exe")) { $cfBin = "C:\Program Files (x86)\cloudflared\cloudflared.exe" }
   if (-not (Test-Path $cfBin)) { Write-Host "cloudflared not found. Run: winget install Cloudflare.cloudflared" -ForegroundColor Red; exit 1 }
   Write-Host "[2/3] Starting cloudflared quick tunnel (timeout 30s for URL) ..." -ForegroundColor Yellow
