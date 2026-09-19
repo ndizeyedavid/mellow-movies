@@ -7,6 +7,7 @@ import BackToTop from "../ui/BackToTop";
 import NavProgress from "../ui/NavProgress";
 import { fetchHome } from "../../api/client";
 import { emitAppReady } from "../../desktopBridge";
+import HomeProxyOverlay from "../ui/HomeProxyOverlay";
 
 /**
  * App shell: sticky navbar (with inline search), routed page content
@@ -32,6 +33,7 @@ export default function Layout() {
       <Footer />
       <BackToTop />
       <Toast />
+      <HomeProxyOverlay />
     </div>
   );
 }
