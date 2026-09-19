@@ -132,6 +132,9 @@ Other: `npm run build` / `preview` / `lint`, `python verify.py` (backend self-ch
 | `RESIDENTIAL_PROXY` | backend | Fallback pool (your 3 free Webshares) — `http://user:pass@host:port` comma/newline/semicolon separated. Multiple proxies round-robin transparently; on `407/429/502` the failed one is skipped for 5 min and the **same** bytes are retried via the next one — movies never stop. Supports `RESIDENTIAL_PROXY_URL` / `HTTP_PROXY` aliases. From `backend/.env`, root `.env`, or platform env. |
 | `GITHUB_REPORT_TOKEN` | backend | Fine-grained PAT with `issues: write` for `ndizeyedavid/mellow-movies` — lets `/api/report` open issues anonymously. Optional `GITHUB_REPORT_REPO` (default `ndizeyedavid/mellow-movies`) and `GITHUB_REPORT_LABELS` (`user-report,bug`). |
 | `NTFY_TOPIC` | backend | e.g. `mellow-movies-reports` — you subscribe in the ntfy.sh app to get phone pushes for each report. Optional `NTFY_SERVER` (default `https://ntfy.sh`). |
+| `MONGODB_URI` | backend | Mongo for home-down notify (24h TTL). Dev: `mongodb://localhost:27017/mellow_movies`, Prod: Atlas `mongodb+srv://...` |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | backend | Google SMTP for recovery blast. `SMTP_USER` = Gmail, `SMTP_PASS` = 16-char App Password (2FA -> apppasswords). Aliases: `GOOGLE_SMTP_USER`/`GMAIL_APP_PASSWORD` |
+| `SMTP_FROM` | backend | Optional From header, default `SMTP_USER` |
 | `VITE_API_BASE` | frontend | e.g. `https://mellow-movies.fastapicloud.dev` in production. Local: `http://localhost:8000` (or `/api` rewrite via `vercel.json`). |
 
 Create `backend/.env` (ignored by git) — never commit tokens. Home first, webshares fallback:
