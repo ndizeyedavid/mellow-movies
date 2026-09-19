@@ -7,6 +7,7 @@ import httpx
 import asyncio
 import urllib.parse
 from pathlib import Path
+from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, FileResponse, Response, StreamingResponse
@@ -152,6 +153,168 @@ def _next_residential_proxy() -> str | None:
 # failing proxy is skipped transparently.
 _proxy_failures: dict[str, float] = {}
 _proxy_cooldown = 300.0  # seconds
+
+# ---------------------------------------------------------------- HOME PROXY DOWN NOTIFY (email via MongoDB + Google SMTP)
+# Emails are stored in MongoDB with a 24h TTL (expire after 86400s) for security.
+# Collection: notify_emails { email, createdAt (TTL), ip }
+# Endpoints: POST /api/notify/email  +  POST /api/notify/recovery
+
+import datetime
+
+_mongo_client = None
+_mongo_db = None
+_notify_memory: dict[str, float] = {}
+_notify_lock = _threading.Lock()
+_home_was_down: bool | None = None
+
+def _get_mongo_collection():
+    global _mongo_client, _mongo_db
+    uri = os.getenv("MONGODB_URI") or os.getenv("MONGO_URL") or "mongodb://localhost:27017/mellow_movies"
+    # If pymongo not installed, fallback to in-memory
+    try:
+        from pymongo import MongoClient  # type: ignore
+    except ImportError:
+        return None
+    try:
+        if _mongo_client is None:
+            _mongo_client = MongoClient(uri, serverSelectionTimeoutMS=1500)
+            # Trigger connection test
+            _mongo_client.admin.command("ping")
+            # Derive db name from URI or default
+            db_name = "mellow_movies"
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(uri)
+                if parsed.path and len(parsed.path) > 1:
+                    db_name = parsed.path.lstrip("/").split("?")[0] or db_name
+            except Exception:
+                pass
+            _mongo_db = _mongo_client[db_name]
+            coll = _mongo_db["notify_emails"]
+            # TTL index: documents expire 24h after createdAt
+            try:
+                coll.create_index("createdAt", expireAfterSeconds=86400)
+                coll.create_index("email", unique=True)
+            except Exception:
+                pass
+        return _mongo_db["notify_emails"] if _mongo_db is not None else None
+    except Exception:
+        return None
+
+
+def _valid_email(s: str) -> bool:
+    return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", s or ""))
+
+
+def _is_home_down_snapshot() -> bool:
+    lst = _residential_proxy_list()
+    if not lst:
+        return False
+    # If any home proxy is in cooldown => down
+    now = time.monotonic()
+    home_keys = ("HOME_PROXY_URL", "HOME_TUNNEL_URL", "HOME_TUNNEL_PROXY", "PRIMARY_PROXY")
+    home_set: set[str] = set()
+    for _k in home_keys:
+        _v = os.getenv(_k)
+        if _v:
+            home_set.update(_parse_proxy_list(_v))
+    if _home_dynamic_url:
+        home_set.add(_home_dynamic_url)
+    for p in lst:
+        if p in home_set and p in _proxy_failures and (now - _proxy_failures[p] < _proxy_cooldown):
+            return True
+    # Also check string pattern fallback if env not set but pool contains relay-looking entries
+    for p in lst:
+        if _is_home_relay(p) and p in _proxy_failures:
+            return True
+    return False
+
+
+def _collect_notify_emails() -> list[str]:
+    coll = _get_mongo_collection()
+    if coll is not None:
+        try:
+            return [d["email"] for d in coll.find({}, {"email": 1, "_id": 0})]
+        except Exception:
+            pass
+    with _notify_lock:
+        # Prune expired (24h) in-memory
+        now = time.time()
+        expired = [k for k, ts in _notify_memory.items() if now - ts > 86400]
+        for k in expired:
+            _notify_memory.pop(k, None)
+        return list(_notify_memory.keys())
+
+
+def _clear_notify_emails():
+    coll = _get_mongo_collection()
+    if coll is not None:
+        try:
+            coll.delete_many({})
+        except Exception:
+            pass
+    with _notify_lock:
+        _notify_memory.clear()
+
+
+async def _send_recovery_emails():
+    emails = _collect_notify_emails()
+    if not emails:
+        return {"sent": 0, "skipped": "no recipients"}
+    smtp_host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user = os.getenv("SMTP_USER") or os.getenv("GOOGLE_SMTP_USER") or os.getenv("GMAIL_USER") or ""
+    smtp_pass = os.getenv("SMTP_PASS") or os.getenv("GOOGLE_SMTP_PASS") or os.getenv("GMAIL_APP_PASSWORD") or os.getenv("GMAIL_PASS") or ""
+    smtp_from = os.getenv("SMTP_FROM") or smtp_user or "noreply@mellowmovies.app"
+    if not smtp_user or not smtp_pass:
+        return {"sent": 0, "skipped": "SMTP credentials not configured (set SMTP_USER/SMTP_PASS)"}
+    # Branded HTML email
+    subject = "Mellow Movies � We\u0027re back! \U0001f389"
+    html = f"""
+    <div style="background:#0f0f0f;padding:32px 0;font-family:Manrope,Arial,sans-serif;">
+      <div style="max-width:560px;margin:0 auto;background:#1a1a1a;border:1px solid #262626;border-radius:16px;overflow:hidden;">
+        <div style="height:4px;background:linear-gradient(90deg,#e50000,#b30000);"></div>
+        <div style="padding:28px 28px 8px 28px;text-align:center;">
+          <img src="https://mellowmovies.vercel.app/logo.png" alt="Mellow Movies" style="width:140px;margin:0 auto;display:block;" />
+          <h1 style="color:#fff;font-size:22px;margin:18px 0 8px 0;">We\u0027re back online!</h1>
+          <p style="color:#bfbfbf;font-size:14px;line-height:1.6;margin:0;">
+            Our home server is back � streams are at full speed again. Thanks for your patience, we missed you!
+          </p>
+        </div>
+        <div style="padding:16px 28px 28px 28px;text-align:center;">
+          <a href="https://mellowmovies.vercel.app" style="display:inline-block;background:#e50000;color:#fff;text-decoration:none;padding:12px 24px;border-radius:12px;font-weight:700;font-size:14px;">Continue Watching</a>
+          <p style="color:#999;font-size:11px;margin:16px 0 0 0;">You got this because you asked to be notified. Your email is auto-deleted after 24h � no spam, ever.</p>
+        </div>
+      </div>
+      <p style="text-align:center;color:#666;font-size:11px;margin-top:16px;">Mellow Movies � Free movies & shows, beautifully delivered.</p>
+    </div>
+    """
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    sent = 0
+    errors: list[str] = []
+    # Send individually to keep To private
+    for addr in emails:
+        try:
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = subject
+            msg["From"] = f"Mellow Movies <{smtp_from}>"
+            msg["To"] = addr
+            msg.attach(MIMEText("We are back! Home server is online again. https://mellowmovies.vercel.app", "plain", "utf-8"))
+            msg.attach(MIMEText(html, "html", "utf-8"))
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as server:
+                server.ehlo()
+                server.starttls()
+                server.login(smtp_user, smtp_pass)
+                server.sendmail(smtp_from, [addr], msg.as_string())
+            sent += 1
+        except Exception as e:
+            errors.append(f"{addr}: {str(e)[:120]}")
+    if sent:
+        _clear_notify_emails()
+    return {"sent": sent, "total": len(emails), "errors": errors[:5]}
+
 
 
 def _mark_proxy_failure(proxy: str | None) -> None:
@@ -1404,6 +1567,7 @@ def _report_rate_limited(ip: str) -> bool:
 
 @app.get("/health/proxy")
 async def health_proxy():
+    global _home_was_down
     """Health: which proxies are configured, which are in cooldown, and a
     1KB probe via the current healthy proxy. No secrets leaked (host only)."""
     pool = _residential_proxy_pool()
@@ -1462,7 +1626,52 @@ async def health_proxy():
         probe["error"] = str(e)[:500]
         probe["ok"] = False
 
-    return {"pool_size": len(pool), "proxies": proxies, "probe": probe}
+    try:
+        current_down = _is_home_down_snapshot()
+        if _home_was_down is True and current_down is False:
+            try:
+                import asyncio as _aio
+                _aio.create_task(_send_recovery_emails())
+            except Exception:
+                pass
+        _home_was_down = current_down
+        probe["home_down"] = current_down
+    except Exception:
+        pass
+    return {"pool_size": len(pool), "proxies": proxies, "probe": probe, "home_down": _is_home_down_snapshot()}
+
+
+class NotifyEmailRequest(BaseModel):
+    email: str
+
+
+@app.post("/api/notify/email")
+async def notify_email(body: NotifyEmailRequest, request: Request):
+    email = (body.email or "").strip().lower()
+    if not _valid_email(email):
+        raise HTTPException(status_code=400, detail="Invalid email address")
+    coll = _get_mongo_collection()
+    if coll is not None:
+        try:
+            coll.update_one({"email": email}, {"$set": {"email": email, "createdAt": datetime.datetime.utcnow(), "ip": _client_ip(request)}}, upsert=True)
+        except Exception:
+            with _notify_lock:
+                _notify_memory[email] = time.time()
+    else:
+        with _notify_lock:
+            _notify_memory[email] = time.time()
+    return {"ok": True, "message": "We will email you when home server is back. Saved 24h only.", "email": email}
+
+
+@app.post("/api/notify/recovery")
+async def notify_recovery():
+    result = await _send_recovery_emails()
+    return {"ok": True, **result}
+
+
+@app.get("/api/notify/count")
+async def notify_count():
+    return {"count": len(_collect_notify_emails())}
 
 
 @app.post("/api/report")

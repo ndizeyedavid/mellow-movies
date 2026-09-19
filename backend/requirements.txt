@@ -2,3 +2,6 @@ fastapi==0.110.0
 fastapi-cli>=0.0.16
 httpx==0.28.1
 uvicorn[standard]==0.27.1
+
+pymongo==4.6.3
+python-dotenv==1.0.1
