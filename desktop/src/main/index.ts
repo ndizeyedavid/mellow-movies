@@ -71,11 +71,18 @@ function createWindow(): void {
   });
 
   // Fallback: also patch bcdn/hakunaymatata Referer via webRequest for direct <video src="https://bcdnxw...">
+  // Use broad filter and check hostname inside, because Chromium URL patterns
+  // only allow "*://*.example.com/*" wildcards, not "*://bcdn*/*".
   session.defaultSession.webRequest.onBeforeSendHeaders(
-    { urls: ["*://*.hakunaymatata.com/*", "*://bcdn*/*", "*://*.b-cdn.net/*"] },
+    { urls: ["*://*/*"] },
     (details, callback) => {
-      details.requestHeaders["Referer"] = "https://moviebox.ph/";
-      details.requestHeaders["Origin"] = "https://moviebox.ph";
+      try {
+        const host = new URL(details.url).hostname;
+        if (host.includes("hakunaymatata.com") || host.includes("b-cdn.net") || host.includes("aoneroom.com") || host.startsWith("bcdn")) {
+          details.requestHeaders["Referer"] = "https://moviebox.ph/";
+          details.requestHeaders["Origin"] = "https://moviebox.ph";
+        }
+      } catch {}
       callback({ requestHeaders: details.requestHeaders });
     },
   );
