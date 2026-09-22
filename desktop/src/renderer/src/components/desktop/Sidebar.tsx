@@ -1,11 +1,22 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { FaHouse, FaFilm, FaTv, FaMagnifyingGlass, FaBookmark, FaCircleInfo, FaGear } from "react-icons/fa6";
+import {
+  FaHouse,
+  FaFilm,
+  FaTv,
+  FaCompass,
+  FaMagnifyingGlass,
+  FaBookmark,
+  FaCircleInfo,
+  FaShieldHalved,
+  FaCirclePlay,
+  FaGithub,
+} from "react-icons/fa6";
 
 const main = [
   { to: "/", label: "Home", icon: FaHouse },
   { to: "/movies", label: "Movies", icon: FaFilm },
   { to: "/shows", label: "TV Shows", icon: FaTv },
-  { to: "/browse", label: "Browse", icon: FaMagnifyingGlass },
+  { to: "/browse", label: "Browse All", icon: FaCompass },
   { to: "/my-list", label: "My List", icon: FaBookmark },
 ];
 
@@ -16,10 +27,13 @@ const secondary = [
 
 export default function Sidebar() {
   const loc = useLocation();
+
   return (
-    <aside className="flex w-[230px] shrink-0 flex-col border-r border-[#262626] bg-[#141414]">
-      <div className="flex-1 p-3">
-        <p className="px-3 py-2 text-[11px] font-semibold tracking-widest text-zinc-500">DISCOVER</p>
+    <aside className="flex w-[248px] shrink-0 flex-col border-r border-line bg-surface">
+      <div className="flex-1 overflow-y-auto px-3 pb-4 pt-5">
+        <p className="px-3 py-2 text-[11px] font-bold tracking-[0.14em] text-muted">
+          DISCOVER
+        </p>
         <nav className="space-y-1">
           {main.map((it) => {
             const active = loc.pathname === it.to;
@@ -28,47 +42,67 @@ export default function Sidebar() {
               <NavLink
                 key={it.to}
                 to={it.to}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  active ? "bg-white text-black" : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${
+                  active
+                    ? "bg-primary text-white shadow-[0_6px_16px_rgba(229,0,0,0.35)]"
+                    : "text-soft hover:bg-card hover:text-white"
                 }`}
               >
-                <Icon className="h-4 w-4" /> {it.label}
+                <Icon
+                  className={`h-4 w-4 shrink-0 ${active ? "text-white" : "text-muted group-hover:text-white"}`}
+                />
+                {it.label}
               </NavLink>
             );
           })}
         </nav>
 
-        <div className="mt-6 border-t border-[#262626] pt-4">
-          <p className="px-3 py-2 text-[11px] font-semibold tracking-widest text-zinc-500">TOOLS</p>
+        <div className="mt-5 border-t border-line pt-5">
+          <p className="px-3 py-2 text-[11px] font-bold tracking-[0.14em] text-muted">
+            TOOLS
+          </p>
           <nav className="space-y-1">
             {secondary.map((it) => {
               const Icon = it.icon;
+              const active = loc.pathname === it.to;
               return (
                 <NavLink
                   key={it.to}
                   to={it.to}
-                  className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                  className={`flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
+                    active
+                      ? "bg-card text-white"
+                      : "text-soft hover:bg-card hover:text-white"
+                  }`}
                 >
                   <Icon className="h-3.5 w-3.5" /> {it.label}
                 </NavLink>
               );
             })}
+            <a
+              href="https://github.com/ndizeyedavid/mellow-movies"
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-soft hover:bg-card hover:text-white"
+            >
+              <FaGithub className="h-3.5 w-3.5" /> GitHub
+            </a>
           </nav>
-        </div>
-
-        <div className="mt-6 rounded-xl border border-amber-900/30 bg-amber-950/20 p-3">
-          <p className="text-xs font-semibold text-amber-400">Attempt A</p>
-          <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-            Direct residential fetch via Electron main with{" "}
-            <code className="rounded bg-black px-1 py-0.5">Referer: moviebox.ph</code>. No proxy.py.
-          </p>
         </div>
       </div>
 
-      <div className="border-t border-[#262626] p-3">
-        <div className="flex items-center gap-2 text-xs text-zinc-500">
-          <FaGear className="h-3.5 w-3.5" /> <span>v1.0.0 — feat/desktop-electron</span>
+      <div className="border-t border-line bg-card/40 px-3 py-3 backdrop-blur">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold text-white">
+            Mellow Desktop
+          </span>
+          <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold text-white">
+            v1.0.0
+          </span>
         </div>
+        <p className="mt-1 text-xs text-muted">
+          feat/desktop-electron • Electron 32 LTS
+        </p>
       </div>
     </aside>
   );

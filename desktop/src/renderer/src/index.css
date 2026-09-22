@@ -1,21 +1,76 @@
 @import "tailwindcss";
 
-:root {
-  --bg: #0a0a0a;
-  --card: #141414;
-  --line: #262626;
-  --line2: #333;
-  --muted: #a3a3a3;
-  --soft: #737373;
+@theme {
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+
+  /* Mellow Movies — Figma tokens (restored red branding) */
+  --color-background: #141414;
+  --color-surface: #0f0f0f;
+  --color-card: #1a1a1a;
+  --color-card2: #1f1f1f;
+  --color-line: #262626;
+  --color-line2: #333333;
+  --color-primary: #e50000;
+  --color-primary-dark: #b30000;
+  --color-muted: #999999;
+  --color-soft: #bfbfbf;
+
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+  --breakpoint-2xl: 1536px;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 html, body, #root {
   height: 100%;
-  background: var(--bg);
+  background: var(--color-background);
   color: white;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Section rhythm — same as web */
+.section-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+}
+@media (min-width: 768px) {
+  .section-stack { gap: 4rem; }
+}
+.section-stack > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 340px;
+}
+.section-gutter {
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
+}
+@media (min-width: 640px) { .section-gutter { padding-left: 2rem; padding-right: 2rem; } }
+@media (min-width: 1024px) { .section-gutter { padding-left: 3rem; padding-right: 3rem; } }
+@media (min-width: 1280px) { .section-gutter { padding-left: 6.25rem; padding-right: 6.25rem; } }
+@media (min-width: 1536px) { .section-gutter { padding-left: 7.5625rem; padding-right: 7.5625rem; } }
+
+body {
+  background-color: var(--color-background);
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #333 transparent;
+  scrollbar-color: var(--color-line2) transparent;
 }
+::-webkit-scrollbar { width: 10px; }
+::-webkit-scrollbar-track { background: var(--color-background); }
+::-webkit-scrollbar-thumb { background: var(--color-line); border-radius: 100px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-line2); }
+
+/* Toast / player polish from web */
+@keyframes toast-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes player-view-in { from { opacity: 0; transform: scale(0.985); } to { opacity: 1; transform: scale(1); } }
+#nprogress .bar { background: var(--color-primary) !important; height: 3px; }
+#nprogress .peg { box-shadow: 0 0 10px var(--color-primary), 0 0 5px var(--color-primary); }

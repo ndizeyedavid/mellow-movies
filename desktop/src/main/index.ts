@@ -11,13 +11,18 @@ let mainWindow: BrowserWindow | null = null;
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    minWidth: 1024,
-    minHeight: 600,
+    width: 1360,
+    height: 860,
+    minWidth: 1100,
+    minHeight: 640,
     show: false,
     autoHideMenuBar: true,
-    titleBarStyle: "hiddenInset",
+    titleBarStyle: "hidden",
+    titleBarOverlay: {
+      color: "#141414",
+      symbolColor: "#ffffff",
+      height: 36,
+    },
     backgroundColor: "#141414",
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
