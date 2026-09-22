@@ -1,3 +1,8 @@
 samples
 .logs
 agent-fs
+.plans/
+desktop/dist/
+desktop/dist-electron/
+desktop/node_modules/
+desktop/out/
