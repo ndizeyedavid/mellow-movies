@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #0a0a0a;
+  --card: #141414;
+  --line: #262626;
+  --line2: #333;
+  --muted: #a3a3a3;
+  --soft: #737373;
+}
+
+html, body, #root {
+  height: 100%;
+  background: var(--bg);
+  color: white;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #333 transparent;
+}

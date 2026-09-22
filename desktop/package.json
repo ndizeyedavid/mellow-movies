@@ -1,0 +1,83 @@
+{
+  "name": "mellow-desktop",
+  "version": "1.0.0",
+  "description": "Mellow Movies — Desktop (Electron, Attempt A: client-direct residential fetch)",
+  "main": "out/main/index.js",
+  "author": "Mellow <david@mellowmovies.vercel.app>",
+  "homepage": "https://mellowmovies.vercel.app",
+  "type": "commonjs",
+  "private": true,
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "build:win": "electron-vite build && electron-builder --win --config",
+    "build:win:dir": "electron-vite build && electron-builder --win --dir --config",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "dashjs": "^5.2.0",
+    "hls.js": "^1.6.16",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-icons": "^5.7.0",
+    "react-router-dom": "^7.18.2"
+  },
+  "devDependencies": {
+    "@electron-toolkit/utils": "^4.0.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.3.3",
+    "electron": "^32.3.3",
+    "electron-builder": "^24.13.3",
+    "electron-updater": "^6.6.2",
+    "electron-vite": "^2.3.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~5.9.2",
+    "vite": "^5.4.19"
+  },
+  "build": {
+    "appId": "com.mellow.movies",
+    "productName": "Mellow Movies",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*",
+      "resources/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "resources/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": true
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "ndizeyedavid",
+        "repo": "mellow-movies"
+      }
+    ]
+  }
+}
