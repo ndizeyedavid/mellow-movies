@@ -119,9 +119,11 @@ export default function StreamPlayer({
     nonce: number;
   } | null>(null);
 
-  // Only the desktop shell exposes the Tauri bridge; the browser build is
-  // a normal web player and never shows the desktop-only affordances.
-  const isDesktop = useMemo(() => isTauri(), []);
+  // Desktop detection: Tauri or Electron (window.electronAPI)
+  const isDesktop = useMemo(
+    () => isTauri() || !!(typeof window !== "undefined" && (window as unknown as { electronAPI?: unknown }).electronAPI),
+    [],
+  );
 
   const [srcIndex, setSrcIndex] = useState(0);
   const src = srcs[srcIndex] ?? "";

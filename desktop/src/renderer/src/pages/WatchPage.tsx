@@ -219,43 +219,59 @@ function WatchContent({ item }: { item: MediaItem }) {
           });
         const srcs: string[] = [];
         const labels: string[] = [];
-        // All CDN urls are proxied through the backend so the browser's
-        // localhost Referer never hits the CDN (which now 429s it). See
-        // backend/api.py -> _proxy_stream for the full story.
+        // Desktop Attempt A: direct CDN via Electron main with correct Referer.
+        // Fallback B: backend proxy pool (only if direct 429/426). We append
+        // proxied candidates AFTER direct ones, preserving the RES_PRIORITY order.
         const toProxy = (u: string) => proxifyMediaUrl(u);
-        // Safari / iOS play HLS natively — prefer it (then plain MP4) over
-        // DASH, whose MVC/MSE path is unreliable there. Everywhere else DASH
-        // stays first (moviebox's native, highest-quality path).
+        const toDirect = (u: string) => u;
+        const isDesktopEnv =
+          typeof window !== "undefined" &&
+          !!(window as unknown as { electronAPI?: unknown }).electronAPI;
+        // Respect RES_PRIORITY order (480>720>1080>360) — do NOT reorder.
+        // Desktop Attempt A: direct via Electron main (Referer moviebox.ph),
+        // plus fallback B (proxied) interleaved per-quality so a 429 on 480
+        // direct immediately tries 480 proxied before moving to 720.
+        const isDesktop = isDesktopEnv;
+        const API_BASE_FB =
+          (typeof import.meta !== "undefined" &&
+            (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_API_BASE) ||
+          "https://mellow-movies.fastapicloud.dev";
+        const toProxied = (u: string) => {
+          if (!u) return u;
+          if (u.includes("/api/proxy/")) return u;
+          const isHls = /\.m3u8(?:\?|$)/i.test(u);
+          return `${API_BASE_FB}${isHls ? "/api/proxy/hls" : "/api/proxy/mp4"}?u=${encodeURIComponent(u)}`;
+        };
+
+        const pushWithFallback = (url: string, label: string) => {
+          if (isDesktop) {
+            // Direct first (Attempt A), then fallback proxied with same label
+            srcs.push(url);
+            labels.push(label);
+            srcs.push(toProxied(url));
+            labels.push(`${label} (fallback)`);
+          } else {
+            srcs.push(toProxy(url));
+            labels.push(label);
+          }
+        };
+
         if (supportsNativeHls) {
-          if (hlsUrl) {
-            srcs.push(toProxy(hlsUrl));
-            labels.push("HLS");
-          }
-          mp4s.forEach((s) => {
-            srcs.push(toProxy(s.url));
-            labels.push(s.resolution);
-          });
-          if (dashEntry) {
-            srcs.push(toProxy(dashEntry.url));
-            labels.push(
+          if (hlsUrl) pushWithFallback(hlsUrl, "HLS");
+          mp4s.forEach((s) => pushWithFallback(s.url, s.resolution));
+          if (dashEntry)
+            pushWithFallback(
+              dashEntry.url,
               `DASH${dashEntry.resolutions ? ` · ${dashEntry.resolutions}` : ""}`,
             );
-          }
         } else {
-          if (dashEntry) {
-            srcs.push(toProxy(dashEntry.url));
-            labels.push(
+          if (dashEntry)
+            pushWithFallback(
+              dashEntry.url,
               `DASH${dashEntry.resolutions ? ` · ${dashEntry.resolutions}` : ""}`,
             );
-          }
-          if (hlsUrl) {
-            srcs.push(toProxy(hlsUrl));
-            labels.push("HLS");
-          }
-          mp4s.forEach((s) => {
-            srcs.push(toProxy(s.url));
-            labels.push(s.resolution);
-          });
+          if (hlsUrl) pushWithFallback(hlsUrl, "HLS");
+          mp4s.forEach((s) => pushWithFallback(s.url, s.resolution));
         }
 
         // The moviebox API serves SRT subtitles; convert each to a WebVTT
