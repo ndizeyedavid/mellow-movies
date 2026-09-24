@@ -10,7 +10,6 @@ import {
 import Hls from "hls.js";
 import * as dashjs from "dashjs";
 import {
-  FaCompress,
   FaPlay,
   FaRotateRight,
   FaTriangleExclamation,
@@ -22,7 +21,7 @@ import PlayerControls, {
   type PlayerMenu,
   type QualityLevel,
 } from "./PlayerControls";
-import { isTauri, onMediaKey, toggleMiniPlayer } from "../../desktopBridge";
+import { onMediaKey } from "../../desktopBridge";
 import { supportsNativeHls } from "../../utils/media";
 import { loadSubtitlePref, saveSubtitlePref } from "../../utils/subtitlePref";
 import { API_BASE_URL } from "../../api/client";
@@ -119,11 +118,7 @@ export default function StreamPlayer({
     nonce: number;
   } | null>(null);
 
-  // Desktop detection: Tauri or Electron (window.electronAPI)
-  const isDesktop = useMemo(
-    () => isTauri() || !!(typeof window !== "undefined" && (window as unknown as { electronAPI?: unknown }).electronAPI),
-    [],
-  );
+  // Desktop-only mini-player affordance removed (was non-functional FaCompress button).
 
   const [srcIndex, setSrcIndex] = useState(0);
   const src = srcs[srcIndex] ?? "";
@@ -1020,17 +1015,7 @@ export default function StreamPlayer({
         />
       )}
 
-      {/* Desktop shell: snap this window into the always-on-top mini player. */}
-      {isDesktop && controlsVisible && !error && (
-        <button
-          onClick={() => void toggleMiniPlayer()}
-          aria-label="Toggle mini player"
-          title="Mini player"
-          className="absolute right-4 top-4 z-40 flex h-10 w-10 items-center justify-center rounded-full border border-white/25 bg-black/60 text-white backdrop-blur-md transition-colors hover:bg-black/80"
-        >
-          <FaCompress className="h-4 w-4" />
-        </button>
-      )}
+
 
       {/* Error state */}
       {error && (
