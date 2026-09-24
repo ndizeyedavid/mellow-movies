@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink } from "react-router-dom";
-import { FaBars, FaXmark, FaAngleDown } from "react-icons/fa6";
+import { FaBars, FaXmark, FaAngleDown, FaDownload } from "react-icons/fa6";
 import { NAV_LINKS, MORE_LINKS } from "../../data/mockData";
 import { useMyList } from "../../store/myList";
 import SearchBar from "./SearchBar";
@@ -141,9 +141,15 @@ export default function Navbar() {
           </div>
         </nav>
 
-        {/* Right side: search bar (desktop) + hamburger (mobile) */}
-        <div className="flex shrink-0 items-center justify-end gap-4">
-          <SearchBar className="hidden w-[170px] lg:block xl:w-[240px] 2xl:w-[280px]" />
+        {/* Right side: download + search + hamburger */}
+        <div className="flex shrink-0 items-center justify-end gap-2 sm:gap-3">
+          <Link
+            to="/download"
+            className="hidden items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-bold text-white shadow-[0_6px_16px_rgba(229,0,0,0.35)] transition hover:bg-primary-dark sm:inline-flex lg:px-5"
+          >
+            <FaDownload className="h-3.5 w-3.5" /> Download
+          </Link>
+          <SearchBar className="hidden w-[150px] lg:block xl:w-[220px] 2xl:w-[260px]" />
           <button
             aria-label={menuOpen ? "Close menu" : "Open menu"}
             aria-expanded={menuOpen}
@@ -167,6 +173,13 @@ export default function Navbar() {
       >
         <nav aria-label="Mobile" className="overflow-hidden">
           <div className="flex flex-col gap-1 px-5 py-5">
+            <Link
+              to="/download"
+              onClick={() => setMenuOpen(false)}
+              className="flex items-center gap-2 rounded-lg bg-primary px-5 py-3 text-base font-bold text-white"
+            >
+              <FaDownload className="h-4 w-4" /> Download App
+            </Link>
             <SearchBar className="mb-3" onNavigate={() => setMenuOpen(false)} />
             {NAV_LINKS.map((link) => (
               <NavLink

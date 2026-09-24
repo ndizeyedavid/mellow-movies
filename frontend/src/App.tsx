@@ -19,6 +19,7 @@ const TermsPage = lazy(() => import("./pages/TermsPage"));
 const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
 const RemovalPage = lazy(() => import("./pages/RemovalPage"));
 const SubscriptionPage = lazy(() => import("./pages/SubscriptionPage"));
+const DownloadPage = lazy(() => import("./pages/DownloadPage"));
 const TitleDetailPage = lazy(() => import("./pages/TitleDetailPage"));
 const WatchPage = lazy(() => import("./pages/WatchPage"));
 const SearchPage = lazy(() => import("./pages/SearchPage"));
@@ -144,6 +145,14 @@ const router = createBrowserRouter([
         element: (
           <Suspense fallback={<PageFallback />}>
             <SubscriptionPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: "download",
+        element: (
+          <Suspense fallback={<PageFallback />}>
+            <DownloadPage />
           </Suspense>
         ),
       },
