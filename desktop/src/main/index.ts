@@ -32,8 +32,25 @@ function createWindow(): void {
     },
   });
 
-  mainWindow.on("ready-to-show", () => {
+  // Fallback — if ready-to-show never fires (Vite HMR hiccup), force show after 3s
+  const showTimer = setTimeout(() => {
+    if (mainWindow && !mainWindow.isVisible()) {
+      console.warn("[main] forcing window show (ready-to-show timeout)");
+      mainWindow.show();
+    }
+  }, 3000);
+
+  mainWindow.once("ready-to-show", () => {
+    clearTimeout(showTimer);
     mainWindow?.show();
+  });
+
+  mainWindow.webContents.on("did-fail-load", (_e, code, desc, url) => {
+    console.error(`[webContents] did-fail-load ${code} ${desc} ${url}`);
+  });
+
+  mainWindow.webContents.on("console-message", (_e, level, message) => {
+    if (level === 2 || level === 3) console.warn(`[renderer:${level}] ${message}`);
   });
 
   // Custom protocol mellow://fetch?u=<cdn> -> streams with correct Referer
@@ -178,10 +195,6 @@ app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 
-  // Check for updates on start (only in production)
-  if (!is.dev) {
-    setTimeout(() => autoUpdater.checkForUpdates().catch(() => {}), 4000);
-  }
 });
 
 app.on("window-all-closed", () => {
