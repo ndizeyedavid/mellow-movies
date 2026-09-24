@@ -6,6 +6,14 @@
 
 ---
 
+## [1.1.5] - 2026-09-24
+
+### Patch — Fixed known issue on auto-updating
+
+- Auto-check now runs 5s after window show in production
+- Manual Tools > Check for updates and sidebar Updates button always work
+- Up-to-date feedback shown
+
 ## [1.1.4] - 2026-09-24
 
 ### Feature — Real downloads with save dialog and titlebar progress

@@ -143,12 +143,12 @@ export default function Navbar() {
 
         {/* Right side: download + search + hamburger */}
         <div className="flex shrink-0 items-center justify-end gap-2 sm:gap-3">
-          <Link
+          {/* <Link
             to="/download"
             className="hidden items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-bold text-white shadow-[0_6px_16px_rgba(229,0,0,0.35)] transition hover:bg-primary-dark sm:inline-flex lg:px-5"
           >
             <FaDownload className="h-3.5 w-3.5" /> Download
-          </Link>
+          </Link> */}
           <SearchBar className="hidden w-[150px] lg:block xl:w-[220px] 2xl:w-[260px]" />
           <button
             aria-label={menuOpen ? "Close menu" : "Open menu"}

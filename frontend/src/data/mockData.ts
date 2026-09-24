@@ -45,7 +45,7 @@ export const NAV_LINKS: NavLink[] = [
   { label: "Home", to: "/" },
   { label: "Movie", to: "/movies" },
   { label: "TV Show", to: "/shows" },
-  { label: "Animation", to: "/browse" },
+  { label: "Download App", to: "/download" },
 ];
 
 export const MORE_LINKS: NavLink[] = [
