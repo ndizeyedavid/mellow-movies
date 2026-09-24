@@ -1,6 +1,6 @@
 {
   "name": "mellow-desktop",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Mellow Movies — Desktop (Electron, Attempt A: client-direct residential fetch)",
   "main": "out/main/index.js",
   "author": "Mellow <david@mellowmovies.vercel.app>",
