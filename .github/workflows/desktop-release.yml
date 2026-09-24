@@ -124,8 +124,7 @@ jobs:
       - name: Build desktop (vite + electron-builder)
         if: steps.check.outputs.skip == 'false'
         working-directory: desktop
-        # --publish never here; we publish via gh release create below so version is exact
-        run: npx electron-builder --win --config --publish never
+        run: npm run build:win
 
       - name: Create tag + GitHub Release
         if: steps.check.outputs.skip == 'false'
