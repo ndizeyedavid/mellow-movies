@@ -466,7 +466,7 @@ export default function SupportPage() {
               <textarea
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                placeholder="Tell me what happened — include the title, what you clicked, and any error you saw (e.g. 429, 426, 91% stuck)…"
+                placeholder="You may write your message here and express yourself to the fullest😉"
                 rows={5}
                 maxLength={2000}
                 required
