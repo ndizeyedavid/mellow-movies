@@ -1,5 +1,6 @@
-import { app, BrowserWindow, ipcMain, protocol, net, session, shell } from "electron";
+import { app, BrowserWindow, ipcMain, protocol, net, session, shell, dialog } from "electron";
 import { join } from "path";
+import * as fs from "fs";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { autoUpdater } from "electron-updater";
 
@@ -206,6 +207,143 @@ app.whenReady().then(() => {
   });
   ipcMain.handle("quit-and-install", () => {
     autoUpdater.quitAndInstall();
+  });
+
+  // Media download: ask where to save, stream with Referer, report progress to Titlebar + sender
+  let activeDownloadPath: string | null = null;
+  let activeDownloadAbort: AbortController | null = null;
+  let activeDownloadFileStream: fs.WriteStream | null = null;
+
+  ipcMain.handle("cancel-download", async () => {
+    if (activeDownloadAbort) {
+      activeDownloadAbort.abort();
+    }
+    if (activeDownloadFileStream) {
+      try {
+        activeDownloadFileStream.destroy();
+      } catch {}
+    }
+    if (activeDownloadPath) {
+      try {
+        if (fs.existsSync(activeDownloadPath)) fs.unlinkSync(activeDownloadPath);
+      } catch {}
+    }
+    if (mainWindow) {
+      mainWindow.webContents.send("media-download-error", { error: "Canceled" });
+      mainWindow.setProgressBar(-1);
+    }
+    activeDownloadPath = null;
+    activeDownloadFileStream = null;
+    activeDownloadAbort = null;
+    return true;
+  });
+
+  ipcMain.handle("download-video", async (_e, payload: { url: string; filename: string }) => {
+    if (!mainWindow) return { canceled: true, error: "No window" };
+    const suggested = payload.filename || "video.mp4";
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: suggested,
+      filters: [
+        { name: "Video", extensions: ["mp4", "mkv", "webm"] },
+        { name: "All Files", extensions: ["*"] },
+      ],
+    });
+    if (canceled || !filePath) return { canceled: true };
+
+    activeDownloadPath = filePath;
+    activeDownloadAbort = new AbortController();
+    mainWindow.webContents.send("media-download-started", { filename: suggested, filePath });
+    mainWindow.setProgressBar(0);
+
+    const isDirectBcdn =
+      filePath && (payload.url.includes("hakunaymatata.com") || payload.url.includes("bcdn") || payload.url.includes("aoneroom.com"));
+    const headers: Record<string, string> = isDirectBcdn
+      ? {
+          Referer: "https://moviebox.ph/",
+          Origin: "https://moviebox.ph",
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          Accept: "*/*",
+        }
+      : {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        };
+
+    try {
+      const res = await net.fetch(payload.url, { headers, redirect: "follow", signal: activeDownloadAbort.signal } as RequestInit);
+      if (!res.ok || !res.body) {
+        throw new Error(`Download failed: ${res.status} ${res.statusText}`);
+      }
+      const total = Number(res.headers.get("content-length") || 0);
+      const fileStream = fs.createWriteStream(filePath);
+      activeDownloadFileStream = fileStream;
+      const reader = (res.body as ReadableStream<Uint8Array>).getReader();
+      let received = 0;
+      let lastSent = 0;
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) {
+            await new Promise<void>((resolve, reject) => {
+              fileStream.write(Buffer.from(value), (err) => (err ? reject(err) : resolve()));
+            });
+            received += value.length;
+            const now = Date.now();
+            if (now - lastSent > 160 || received === total) {
+              lastSent = now;
+              const percent = total ? Math.min(99, Math.round((received / total) * 100)) : 0;
+              mainWindow?.webContents.send("media-download-progress", {
+                filename: suggested,
+                filePath,
+                percent,
+                transferred: received,
+                total,
+              });
+              if (total) mainWindow?.setProgressBar(percent / 100);
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+      await new Promise<void>((resolve, reject) => {
+        fileStream.end((err?: Error | null) => (err ? reject(err) : resolve()));
+      });
+      mainWindow.webContents.send("media-download-done", { filename: suggested, filePath });
+      mainWindow.setProgressBar(-1);
+      activeDownloadPath = null;
+      activeDownloadFileStream = null;
+      activeDownloadAbort = null;
+      return { canceled: false, filePath };
+    } catch (err) {
+      const isAbort = err instanceof Error && (err.name === "AbortError" || String(err).includes("aborted"));
+      if (!isAbort) {
+        try {
+          if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        } catch {}
+      }
+      if (!isAbort) mainWindow.webContents.send("media-download-error", { error: String(err) });
+      mainWindow.setProgressBar(-1);
+      activeDownloadPath = null;
+      activeDownloadFileStream = null;
+      activeDownloadAbort = null;
+      if (isAbort) return { canceled: true };
+      return { canceled: false, error: String(err) };
+    }
+  });
+
+  ipcMain.handle("open-file-location", async (_e, filePath: string) => {
+    if (!filePath) return false;
+    shell.showItemInFolder(filePath);
+    return true;
+  });
+
+  ipcMain.handle("open-file", async (_e, filePath: string) => {
+    if (!filePath) return false;
+    const res = await shell.openPath(filePath);
+    return res === "";
   });
 
   createWindow();

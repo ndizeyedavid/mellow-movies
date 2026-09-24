@@ -371,18 +371,46 @@ function WatchContent({ item }: { item: MediaItem }) {
     }
   };
 
-  const handleDownload = () => {
-    // Download current quality via residential proxy (backend /api/proxy/mp4)
+  const handleDownload = async () => {
     const src = streamSrcs[0];
     if (!src) return;
-    const a = document.createElement("a");
-    a.href = src;
     const safe = item.title.replace(/[^\w\- ]/g, "").slice(0, 60) || "video";
     const tag = isShow ? `S${pick.season}E${pick.episode}` : "";
     const ext = src.includes(".m3u8") ? "m3u8" : "mp4";
-    a.download = `${safe} ${tag}.${ext}`.trim();
+    const filename = `${safe} ${tag}.${ext}`.trim();
+
+    const api = (window as unknown as { electronAPI?: import("../preload").IElectronAPI }).electronAPI;
+    // Desktop: use native save dialog + streamed download with progress in titlebar
+    if (api?.downloadVideo) {
+      try {
+        showToast("Choose where to save", { message: filename, duration: 2000 });
+        const res = await api.downloadVideo({ url: src, filename });
+        if (res?.canceled) return;
+        if (res?.error) {
+          showToast("Download failed", { message: res.error, duration: 4000 });
+          return;
+        }
+        if (res?.filePath) {
+          showToast("Download complete", {
+            message: res.filePath,
+            duration: 6000,
+            action: {
+              label: "Open folder",
+              onClick: () => api.openFileLocation(res.filePath!),
+            },
+          });
+        }
+      } catch (e) {
+        showToast("Download failed", { message: String(e), duration: 4000 });
+      }
+      return;
+    }
+
+    // Fallback for web (should not happen on desktop)
+    const a = document.createElement("a");
+    a.href = src;
+    a.download = filename;
     a.rel = "noopener";
-    // Let proxy set Content-Disposition; download attribute is hint
     document.body.appendChild(a);
     a.click();
     a.remove();

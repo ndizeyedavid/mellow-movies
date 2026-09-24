@@ -22,10 +22,6 @@ const MyListPage = lazy(() => import("./pages/MyListPage"));
 const TitleDetailPage = lazy(() => import("./pages/TitleDetailPage"));
 const WatchPage = lazy(() => import("./pages/WatchPage"));
 const SupportPage = lazy(() => import("./pages/SupportPage"));
-const TermsPage = lazy(() => import("./pages/TermsPage"));
-const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
-const RemovalPage = lazy(() => import("./pages/RemovalPage"));
-const SubscriptionPage = lazy(() => import("./pages/SubscriptionPage"));
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -127,10 +123,6 @@ function Layout() {
                 <Route path="title/:id" element={<TitleDetailPage />} />
                 <Route path="watch/:id" element={<WatchPage />} />
                 <Route path="support" element={<SupportPage />} />
-                <Route path="terms" element={<TermsPage />} />
-                <Route path="privacy" element={<PrivacyPage />} />
-                <Route path="removal" element={<RemovalPage />} />
-                <Route path="pricing" element={<SubscriptionPage />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </Suspense>

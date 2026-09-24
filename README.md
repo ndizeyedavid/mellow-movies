@@ -40,6 +40,7 @@ No logins. No ads. Just search, continue watching, and press play.
 - **Search** — hybrid dropdown (local + debounced API, keyboard nav, `/{focus}`), `search/suggest` and `subject/search`.
 - **Title detail** — hero backdrop, seasons/episodes picker, cast, details card, "More Like This".
 - **Player** — adaptive quality, audio/subs (SRT→VTT), seek/volume, fullscreen/PiP, keyboard (`Space/K`, arrows, `M`, `F`), boxed vs wide layout, download of current quality via proxy, timestamp **Share** (`?t=`) that seeks on open.
+- **Desktop app** — Electron 32, **real download**: native save dialog, titlebar progress bar with **cancel X**, toast with **Open folder**. No Python, direct `Referer` spoof via `mellow://fetch`.
 - **Open Graph** — per-title `og:title/description/image/url/type` via `useOgMeta` so WhatsApp/Telegram render a rich card with the title's poster (absolute URL, `video.movie`/`video.tv_show`).
 - **Report issue** — anonymous `POST /api/report` (no GitHub login) creates a GitHub issue via the server's `GITHUB_REPORT_TOKEN` and pushes to **ntfy.sh** (`NTFY_TOPIC`). Rate-limited per IP (45s). Useful when the residential proxy bandwidth runs out and streams `426/429` or stop midway.
 - **PWA** — installable `manifest.webmanifest`, icons (`favicon.svg` + `192/512`), offline shell.
@@ -68,6 +69,7 @@ movies/
 │   ├── api.py                 # all routes + proxy + /api/report + /health/proxy
 │   ├── requirements.txt
 │   └── verify.py
+├── desktop/                   # Electron 32 — `mellow://fetch`, titlebar download bar, auto-updater
 ├── frontend/
 │   ├── src/
 │   │   ├── api/               # client.ts (cached fetch + proxifyMediaUrl), media.ts, report.ts
@@ -82,7 +84,7 @@ movies/
 │   │   └── utils/             # captions (SRT→VTT), toast, subtitlePref
 │   ├── public/                # manifest, sw.js, icons, og-image, sitemap
 │   └── vercel.json
-├── scripts/                   # start-dev.ps1 / stop-dev.ps1 + start-home-proxy.ps1/.bat (home residential tunnel)
+├── scripts/                   # start-dev.ps1 / stop-dev.ps1 + start-home-proxy.ps1/.bat (home residential tunnel) + generate-icon.py
 ├── dev.bat                    # menu: start / stop / restart local
 ├── .logs/
 └── README.md
