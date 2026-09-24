@@ -6,6 +6,19 @@
 
 ---
 
+## [1.0.4] - 2026-09-24
+
+### Patch — In-app updater experience
+
+Polished the side-load update flow so users never miss a release:
+
+- **Update available modal:** centered, accessible popup when a new GitHub Release is detected, showing the exact version transition (current version to new version). Two primary actions: Update now and Remind me later. Clicking outside or pressing Escape closes it like a standard modal.
+- **Smart download:** tapping Update now shows a live, dynamic progress bar (percent, transferred bytes and speed piped from the main process) while the installer downloads. No freeze, real feedback.
+- **Restart choice:** once downloaded, the modal switches to a restart prompt with Restart now and Later. Later keeps the update cached and reminds on next launch, Now quits and installs via electron-updater.
+- **What is new on first launch:** after every successful update, the first app start shows a centered changelog modal for that version, fetched from the GitHub Release notes. Dismiss with Continue or outside click, shown once per version via local version tracking.
+
+> **How it works under the hood:** main process forwards `update-available`, `download-progress` and `update-downloaded` through `preload` to the renderer, with `autoDownload` disabled so the user stays in control.
+
 ## [1.0.3] - 2026-09-24
 
 ### Patch — Desktop polish & perf

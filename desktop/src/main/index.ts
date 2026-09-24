@@ -171,12 +171,28 @@ app.whenReady().then(() => {
 
   // Auto-updater (GitHub Releases, side-load)
   autoUpdater.autoDownload = false;
-  autoUpdater.on("update-available", () => {
-    mainWindow?.webContents.send("update-available");
+  autoUpdater.autoInstallOnAppQuit = false;
+  autoUpdater.on("update-available", (info) => {
+    mainWindow?.webContents.send("update-available", {
+      version: info.version,
+      fromVersion: app.getVersion(),
+    });
   });
-  autoUpdater.on("update-downloaded", () => {
-    mainWindow?.webContents.send("update-downloaded");
+  autoUpdater.on("update-downloaded", (info) => {
+    mainWindow?.webContents.send("update-downloaded", { version: info.version });
   });
+  autoUpdater.on("download-progress", (p) => {
+    mainWindow?.webContents.send("download-progress", {
+      percent: p.percent,
+      transferred: p.transferred,
+      total: p.total,
+      bytesPerSecond: p.bytesPerSecond,
+    });
+  });
+  autoUpdater.on("error", (err) => {
+    mainWindow?.webContents.send("update-error", String(err?.message || err));
+  });
+  ipcMain.handle("get-version", () => app.getVersion());
   ipcMain.handle("check-for-updates", async () => {
     try {
       const res = await autoUpdater.checkForUpdates();
@@ -184,6 +200,9 @@ app.whenReady().then(() => {
     } catch {
       return null;
     }
+  });
+  ipcMain.handle("download-update", async () => {
+    await autoUpdater.downloadUpdate();
   });
   ipcMain.handle("quit-and-install", () => {
     autoUpdater.quitAndInstall();
