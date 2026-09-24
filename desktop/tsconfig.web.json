@@ -4,9 +4,13 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "jsx": "react-jsx",
     "allowSyntheticDefaultImports": true,
     "skipLibCheck": true,
-    "types": ["electron-vite/node"]
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/renderer/src/*"]
+    }
   },
-  "include": ["electron.vite.config.ts", "src/main/**/*", "src/preload/**/*"]
+  "include": ["src/renderer/src/**/*"]
 }
