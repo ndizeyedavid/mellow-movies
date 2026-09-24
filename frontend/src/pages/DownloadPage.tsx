@@ -53,7 +53,6 @@ function PlatformCard({
   downloadUrl,
   fileName,
   size,
-  version,
   badge,
 }: PlatformCardProps) {
   return (
@@ -140,9 +139,6 @@ export default function DownloadPage() {
 
   // Find Windows assets: Setup (nsis) and portable
   const winSetup = release?.assets.find((a) => /Setup.*\.exe$/i.test(a.name));
-  const winPortable = release?.assets.find(
-    (a) => /\.exe$/i.test(a.name) && !/Setup/i.test(a.name),
-  );
   const tag = release?.tag_name || FALLBACK_TAG;
   const version = tag.replace(/^v/, "");
 
