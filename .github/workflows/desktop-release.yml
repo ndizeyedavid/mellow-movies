@@ -121,10 +121,12 @@ jobs:
         working-directory: desktop
         run: npm ci
 
-      - name: Build desktop (vite + electron-builder)
+      - name: Build desktop (vite + electron-builder, no publish)
         if: steps.check.outputs.skip == 'false'
         working-directory: desktop
-        run: npm run build:win
+        run: |
+          npm run build
+          npx electron-builder --win --config --publish never
 
       - name: Create tag + GitHub Release
         if: steps.check.outputs.skip == 'false'
