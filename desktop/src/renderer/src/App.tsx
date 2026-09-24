@@ -11,6 +11,7 @@ import Sidebar from "./components/desktop/Sidebar";
 import UpdateModal from "./components/desktop/UpdateModal";
 import ChangelogModal from "./components/desktop/ChangelogModal";
 import Toast from "./components/ui/Toast";
+import { showToast } from "./utils/toast";
 import NavProgress from "./components/ui/NavProgress";
 
 const HomePage = lazy(() => import("./pages/HomePage"));
@@ -90,19 +91,24 @@ function Layout() {
       if (cancelled) return;
       setDownloadProgress(p.percent ?? 0);
     };
-    const onError = () => {
+    const onError = (msg: string) => {
       setDownloading(false);
+      showToast("Update check failed", { message: msg, duration: 4000 });
+    };
+    const onNotAvail = () => {
+      showToast("You are up to date", { message: `v${updateFrom || "latest"} is the newest`, duration: 2500 });
     };
 
     window.electronAPI?.onUpdateAvailable?.(onAvail);
     window.electronAPI?.onUpdateDownloaded?.(onDone);
     window.electronAPI?.onDownloadProgress?.(onProgress);
     window.electronAPI?.onUpdateError?.(onError);
+    window.electronAPI?.onUpdateNotAvailable?.(onNotAvail);
 
     return () => {
       cancelled = true;
     };
-  }, [updateTo]);
+  }, [updateTo, updateFrom]);
 
   return (
     <div className="flex h-screen flex-col bg-background text-white selection:bg-primary selection:text-white">

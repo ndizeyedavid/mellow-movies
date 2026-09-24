@@ -8,6 +8,7 @@ import {
   FaBookmark,
   FaCircleInfo,
   FaGithub,
+  FaArrowsRotate,
 } from "react-icons/fa6";
 
 const main = [
@@ -90,6 +91,14 @@ export default function Sidebar() {
               GitHub
             </span>
           </a>
+          <button
+            onClick={() => window.electronAPI?.checkForUpdates?.()}
+            className="flex w-full flex-col items-center justify-center gap-1.5 px-2 py-4 text-center text-soft transition-colors hover:bg-card hover:text-white"
+            title="Check for updates"
+          >
+            <FaArrowsRotate className="h-6 w-6" />
+            <span className="text-[11px] font-semibold leading-none tracking-wide">Updates</span>
+          </button>
         </nav>
       </div>
     </aside>

@@ -13,6 +13,7 @@
 - **Ask where to save:** Download button now opens the native save dialog prefilled with `Title S01E01.mp4`, streams with correct `Referer` and `Range`, and shows a centered titlebar progress bar (filename plus percent) plus taskbar progress while downloading. Cancel with the X on the titlebar, and the partial file is cleaned up.
 - **Open folder toast:** On finish, a toast offers Open file location (reveals in Explorer/Finder). Speed is maxed by chunked streaming with throttled progress updates.
 - **Leaner desktop:** Removed unused pages (`Terms`, `Privacy`, `Removal`, `Subscription`) and their `cta-bg`/`carousel` assets, LegalPage/PricingCard sections — smaller bundle, no dead routes.
+- **Updater fix:** Auto-check now runs 5s after window show in production, manual Tools > Check for updates and sidebar Updates button always work, and up-to-date feedback is shown. Fixes missing modal on v1.0.4 -> v1.1.4.
 
 ## [1.0.4] - 2026-09-24
 

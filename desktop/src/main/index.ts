@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, protocol, net, session, shell, dialog } from "electron";
+import { app, BrowserWindow, ipcMain, protocol, net, session, shell, dialog, Menu } from "electron";
 import { join } from "path";
 import * as fs from "fs";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
@@ -173,6 +173,7 @@ app.whenReady().then(() => {
   // Auto-updater (GitHub Releases, side-load)
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
+  autoUpdater.logger = null;
   autoUpdater.on("update-available", (info) => {
     mainWindow?.webContents.send("update-available", {
       version: info.version,
@@ -190,6 +191,9 @@ app.whenReady().then(() => {
       bytesPerSecond: p.bytesPerSecond,
     });
   });
+  autoUpdater.on("update-not-available", () => {
+    mainWindow?.webContents.send("update-not-available");
+  });
   autoUpdater.on("error", (err) => {
     mainWindow?.webContents.send("update-error", String(err?.message || err));
   });
@@ -197,8 +201,21 @@ app.whenReady().then(() => {
   ipcMain.handle("check-for-updates", async () => {
     try {
       const res = await autoUpdater.checkForUpdates();
-      return res ? res.updateInfo.version : null;
-    } catch {
+      if (!res) {
+        mainWindow?.webContents.send("update-not-available");
+        return null;
+      }
+      // if already latest, explicitly notify renderer
+      // checkForUpdates resolves even when not available, so we send not-available if version matches
+      const latest = res.updateInfo.version;
+      const current = app.getVersion();
+      if (latest === current) {
+        mainWindow?.webContents.send("update-not-available");
+        return null;
+      }
+      return latest;
+    } catch (e) {
+      mainWindow?.webContents.send("update-error", String((e as Error)?.message || e));
       return null;
     }
   });
@@ -348,10 +365,47 @@ app.whenReady().then(() => {
 
   createWindow();
 
+  // Native menu with Tools > Check for updates
+  const template: Electron.MenuItemConstructorOptions[] = [
+    { role: "fileMenu" },
+    { role: "editMenu" },
+    { role: "viewMenu" },
+    {
+      label: "Tools",
+      submenu: [
+        {
+          label: "Check for updates",
+          click: async () => {
+            try {
+              await autoUpdater.checkForUpdates();
+            } catch (e) {
+              mainWindow?.webContents.send("update-error", String((e as Error)?.message || e));
+            }
+          },
+        },
+        { type: "separator" },
+        { role: "reload" },
+        { role: "forceReload" },
+        { role: "toggleDevTools" },
+      ],
+    },
+    { role: "windowMenu" },
+    { role: "help", submenu: [{ label: "About Mellow Movies", click: () => shell.openExternal("https://mellowmovies.vercel.app") }] },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 
+  // Auto-check 5s after window shows (production only, not in dev)
+  mainWindow?.once("ready-to-show", () => {
+    if (!is.dev) {
+      setTimeout(() => {
+        autoUpdater.checkForUpdates().catch(() => {});
+      }, 5000);
+    }
+  });
 });
 
 app.on("window-all-closed", () => {

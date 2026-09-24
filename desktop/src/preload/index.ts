@@ -11,6 +11,7 @@ export interface IElectronAPI {
   onUpdateDownloaded: (cb: (info: { version: string }) => void) => void;
   onDownloadProgress: (cb: (p: { percent: number; transferred: number; total: number; bytesPerSecond: number }) => void) => void;
   onUpdateError: (cb: (msg: string) => void) => void;
+  onUpdateNotAvailable: (cb: () => void) => void;
   downloadVideo: (opts: { url: string; filename: string }) => Promise<{ canceled?: boolean; filePath?: string; error?: string }>;
   cancelDownload: () => Promise<boolean>;
   openFileLocation: (filePath: string) => Promise<boolean>;
@@ -32,6 +33,7 @@ const api: IElectronAPI = {
   onUpdateDownloaded: (cb) => ipcRenderer.on("update-downloaded", (_e, info) => cb(info)),
   onDownloadProgress: (cb) => ipcRenderer.on("download-progress", (_e, p) => cb(p)),
   onUpdateError: (cb) => ipcRenderer.on("update-error", (_e, msg) => cb(msg)),
+  onUpdateNotAvailable: (cb) => ipcRenderer.on("update-not-available", () => cb()),
   downloadVideo: (opts) => ipcRenderer.invoke("download-video", opts),
   cancelDownload: () => ipcRenderer.invoke("cancel-download"),
   openFileLocation: (filePath) => ipcRenderer.invoke("open-file-location", filePath),
