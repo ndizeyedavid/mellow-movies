@@ -20,6 +20,7 @@ import {
   FaArrowRight,
   FaCopy,
   FaHeart,
+  FaGithub,
 } from "react-icons/fa6";
 import { faqs } from "../data/mockData";
 import { usePageTitle } from "../hooks/usePageTitle";
@@ -56,7 +57,11 @@ export default function SupportPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
 
   // live system status — hits real backend
-  const [health, setHealth] = useState<{ ok?: boolean; pool_size?: number; probe?: { ok?: boolean; status?: number } } | null>(null);
+  const [health, setHealth] = useState<{
+    ok?: boolean;
+    pool_size?: number;
+    probe?: { ok?: boolean; status?: number };
+  } | null>(null);
   const [healthLoading, setHealthLoading] = useState(true);
 
   useEffect(() => {
@@ -81,16 +86,23 @@ export default function SupportPage() {
     return faqs.filter((f) => {
       const catOk =
         faqCat === "All" ||
-        (faqCat === "Playback" && /buffer|play|quality|stream/i.test(f.question + f.answer)) ||
-        (faqCat === "Account" && /account|login|list/i.test(f.question + f.answer)) ||
-        (faqCat === "Content" && /catalog|disappear|download/i.test(f.question + f.answer)) ||
-        (faqCat === "Legal" && /legal|copyright|removal/i.test(f.question + f.answer));
-      const qOk = !q || f.question.toLowerCase().includes(q) || f.answer.toLowerCase().includes(q);
+        (faqCat === "Playback" &&
+          /buffer|play|quality|stream/i.test(f.question + f.answer)) ||
+        (faqCat === "Account" &&
+          /account|login|list/i.test(f.question + f.answer)) ||
+        (faqCat === "Content" &&
+          /catalog|disappear|download/i.test(f.question + f.answer)) ||
+        (faqCat === "Legal" &&
+          /legal|copyright|removal/i.test(f.question + f.answer));
+      const qOk =
+        !q ||
+        f.question.toLowerCase().includes(q) ||
+        f.answer.toLowerCase().includes(q);
       return catOk && qOk;
     });
   }, [faqQ, faqCat]);
 
-  const canSubmit = name.trim().length >= 2 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && message.trim().length >= 10 && !sending;
+  const canSubmit = message.trim().length >= 10 && !sending;
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -112,9 +124,12 @@ export default function SupportPage() {
           user_agent: navigator.userAgent,
         }),
       });
-      if (!res.ok) throw new Error((await res.text()) || `Failed ${res.status}`);
+      if (!res.ok)
+        throw new Error((await res.text()) || `Failed ${res.status}`);
       const data = await res.json().catch(() => ({}));
-      const id = data.github_issue ? String(data.github_issue).split("/").pop() || "created" : `MM-${Date.now().toString(36).toUpperCase()}`;
+      const id = data.github_issue
+        ? String(data.github_issue).split("/").pop() || "created"
+        : `MM-${Date.now().toString(36).toUpperCase()}`;
       setSent({ id: String(id) });
       setMessage("");
     } catch (err) {
@@ -127,24 +142,28 @@ export default function SupportPage() {
   const quickActions = [
     {
       icon: FaTriangleExclamation,
-      title: "Playback fails / 429 / 426",
+      title: "Movie doesn't play",
       desc: "Video stuck, 91% buffer, or mid-play stop.",
       cta: "Report issue",
       color: "from-primary/20 to-primary/5 border-primary/20",
       onClick: () => {
         setCategory("Playback");
-        document.getElementById("contact-form")?.scrollIntoView({ behavior: "smooth", block: "center" });
+        document
+          .getElementById("contact-form")
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
       },
     },
     {
       icon: FaFilm,
-      title: "Request a title",
-      desc: "Can't find a movie or show?",
-      cta: "Request",
+      title: "Report missing content",
+      desc: "Title disappeared from catalog or won't load?",
+      cta: "Report",
       color: "from-violet-500/15 to-violet-500/5 border-violet-500/20",
       onClick: () => {
         setCategory("Content");
-        document.getElementById("contact-form")?.scrollIntoView({ behavior: "smooth" });
+        document
+          .getElementById("contact-form")
+          ?.scrollIntoView({ behavior: "smooth" });
       },
     },
     {
@@ -155,7 +174,9 @@ export default function SupportPage() {
       color: "from-emerald-500/15 to-emerald-500/5 border-emerald-500/20",
       onClick: () => {
         setCategory("Playback");
-        document.getElementById("contact-form")?.scrollIntoView({ behavior: "smooth" });
+        document
+          .getElementById("contact-form")
+          ?.scrollIntoView({ behavior: "smooth" });
       },
     },
     {
@@ -166,7 +187,9 @@ export default function SupportPage() {
       color: "from-amber-500/15 to-amber-500/5 border-amber-500/20",
       onClick: () => {
         setCategory("Playback");
-        document.getElementById("contact-form")?.scrollIntoView({ behavior: "smooth" });
+        document
+          .getElementById("contact-form")
+          ?.scrollIntoView({ behavior: "smooth" });
       },
     },
   ] as const;
@@ -175,12 +198,6 @@ export default function SupportPage() {
     <div className="overflow-hidden">
       {/* ---------- HERO — alive with orbs + live pulse ---------- */}
       <section className="relative overflow-hidden border-b border-line">
-        {/* gradient orbs */}
-        <div className="pointer-events-none absolute inset-0">
-          <div className="absolute -top-28 -left-28 h-[520px] w-[520px] rounded-full bg-primary/20 blur-[90px] animate-[float_9s_ease-in-out_infinite]" />
-          <div className="absolute -bottom-24 -right-24 h-[560px] w-[560px] rounded-full bg-violet-500/15 blur-[90px] animate-[float_11s_ease-in-out_infinite_reverse]" />
-          <div className="absolute left-1/2 top-1/2 h-[420px] w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/[0.04] blur-[60px]" />
-        </div>
         {/* subtle grid */}
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.06]"
@@ -197,123 +214,20 @@ export default function SupportPage() {
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
               </span>
-              HELP CENTER — WE USUALLY REPLY IN ~2H
-              <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold text-white">
-                <FaCircleCheck className="h-3 w-3" /> LIVE
-              </span>
+              HELP CENTER // I USUALLY REPLY IN ~2H
             </div>
 
-            <h1 className="mt-4 text-4xl font-extrabold leading-none tracking-tight text-white md:text-5xl">
-              We&apos;re here.
+            <h1 className="mt-4 text-4xl font-extrabold leading-none tracking-tight text-white md:text-4xl">
+              Having an issue?
               <br />
-              <span className="bg-gradient-to-r from-primary to-violet-400 bg-clip-text text-transparent">Really here.</span>
+              <span className="text-primary-dark">
+                Worry not, I've got your back.
+              </span>
             </h1>
             <p className="mt-3 max-w-xl text-base leading-relaxed text-muted lg:text-lg">
-              Pick a quick action, search the FAQ, or drop us a line. Your message creates a GitHub issue and pings us on ntfy.sh — no account needed.
+              Pick a quick action, search the FAQ, or drop me a line. Your
+              message creates a GitHub issue and pings me directly on my phone.
             </p>
-
-            <div className="mt-6 flex flex-wrap gap-3">
-              <a href="#contact-form" className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-bold text-white shadow-[0_10px_30px_rgba(229,0,0,0.35)] transition hover:bg-primary-dark">
-                <FaPaperPlane className="h-3.5 w-3.5" /> Contact us
-              </a>
-              <a
-                href="#faq"
-                className="inline-flex items-center gap-2 rounded-full border border-line bg-card px-5 py-3 text-sm font-semibold text-white hover:border-line2"
-              >
-                Search FAQ <FaMagnifyingGlass className="h-3.5 w-3.5 text-muted" />
-              </a>
-            </div>
-
-            {/* live stats row */}
-            <div className="mt-8 grid max-w-xl grid-cols-3 gap-3">
-              {[
-                { k: "Avg reply", v: "~2 hours", sub: "last 7 days", icon: FaClock },
-                { k: "Uptime", v: health?.probe?.ok ? "99.9%" : healthLoading ? "…" : "degraded", sub: `${health?.pool_size ?? "—"} proxies`, icon: FaSignal },
-                { k: "Tickets", v: "1.2k+", sub: "resolved", icon: FaHeart },
-              ].map((s) => (
-                <div key={s.k} className="rounded-2xl border border-line bg-card/70 px-3 py-3 backdrop-blur">
-                  <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-widest text-muted">
-                    <s.icon className="h-3 w-3" /> {s.k}
-                  </div>
-                  <div className="mt-1 text-sm font-bold text-white">{s.v}</div>
-                  <div className="text-xs text-muted">{s.sub}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* right: live system status card */}
-          <div className="w-full max-w-[420px] shrink-0">
-            <div className="relative overflow-hidden rounded-[24px] border border-line bg-card p-5 shadow-2xl">
-              <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-primary/10 blur-2xl" />
-              <div className="flex items-center justify-between">
-                <h3 className="flex items-center gap-2 text-sm font-bold text-white">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400">
-                    <FaSignal className="h-3.5 w-3.5" />
-                  </span>
-                  System status
-                </h3>
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs font-bold text-emerald-400">
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" /> Operational
-                </span>
-              </div>
-
-              <div className="mt-4 space-y-3">
-                <div className="flex items-center justify-between rounded-xl bg-surface px-3 py-3">
-                  <span className="flex items-center gap-2 text-sm text-soft">
-                    <FaBolt className="h-4 w-4 text-amber-400" /> Streaming API
-                  </span>
-                  <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
-                    <FaCircleCheck className="h-3.5 w-3.5" /> Up
-                  </span>
-                </div>
-                <div className="flex items-center justify-between rounded-xl bg-surface px-3 py-3">
-                  <span className="flex items-center gap-2 text-sm text-soft">
-                    <FaShieldHalved className="h-4 w-4 text-violet-400" /> Proxy pool
-                  </span>
-                  {healthLoading ? (
-                    <span className="text-xs text-muted">checking…</span>
-                  ) : health?.probe?.ok ? (
-                    <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400">
-                      <FaCircleCheck className="h-3.5 w-3.5" /> {health?.pool_size ?? 0} routes
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-1.5 text-xs font-semibold text-amber-400">
-                      <FaTriangleExclamation className="h-3.5 w-3.5" /> Degraded
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center justify-between rounded-xl bg-surface px-3 py-3">
-                  <span className="flex items-center gap-2 text-sm text-soft">
-                    <FaHeadset className="h-4 w-4 text-sky-400" /> Human reply
-                  </span>
-                  <span className="text-xs font-semibold text-white">~2 hours</span>
-                </div>
-              </div>
-
-              <div className="mt-4 flex gap-2">
-                <a
-                  href="https://mellow-movies.fastapicloud.dev/health/proxy"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex-1 rounded-full border border-line bg-background px-3 py-2 text-center text-xs font-semibold text-white hover:border-line2"
-                >
-                  View health
-                </a>
-                <a
-                  href="https://github.com/ndizeyedavid/mellow-movies/issues"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex-1 rounded-full bg-primary px-3 py-2 text-center text-xs font-bold text-white hover:bg-primary-dark"
-                >
-                  Issues
-                </a>
-              </div>
-
-              <p className="mt-3 text-center text-xs text-muted">
-                Responses create a GitHub issue + ntfy push. No spam — rate-limited per IP.
-              </p>
-            </div>
           </div>
         </div>
       </section>
@@ -331,13 +245,18 @@ export default function SupportPage() {
               )}
             >
               <div className="absolute inset-0 bg-gradient-to-br from-white/[0.04] to-transparent opacity-0 transition group-hover:opacity-100" />
-              <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-white text-black shadow">
+              <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-white text-black shadow">
                 <a.icon className="h-5 w-5" />
               </div>
-              <h3 className="relative mt-4 text-sm font-bold text-white">{a.title}</h3>
-              <p className="relative mt-1 text-xs leading-relaxed text-muted">{a.desc}</p>
+              <h3 className="relative mt-4 text-sm font-bold text-white">
+                {a.title}
+              </h3>
+              <p className="relative mt-1 text-xs leading-relaxed text-muted">
+                {a.desc}
+              </p>
               <span className="relative mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-primary">
-                {a.cta} <FaArrowRight className="h-3 w-3 transition group-hover:translate-x-0.5" />
+                {a.cta}{" "}
+                <FaArrowRight className="h-3 w-3 transition group-hover:translate-x-0.5" />
               </span>
             </button>
           ))}
@@ -345,12 +264,20 @@ export default function SupportPage() {
       </section>
 
       {/* ---------- FAQ — searchable, alive ---------- */}
-      <section id="faq" className="section-gutter mx-auto w-full max-w-[1920px] py-8">
+      <section
+        id="faq"
+        className="section-gutter mx-auto w-full max-w-[1920px] py-8"
+      >
         <div className="flex flex-col gap-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <h2 className="text-2xl font-extrabold text-white md:text-3xl">Frequently asked</h2>
-              <p className="mt-1 text-sm text-muted">Search before you write — most answers are already here. Live filter below.</p>
+              <h2 className="text-2xl font-extrabold text-white md:text-3xl">
+                Frequently asked
+              </h2>
+              <p className="mt-1 text-sm text-muted">
+                I believe these could be among the questions you might be
+                wondering.
+              </p>
             </div>
             <div className="flex w-full max-w-md items-center gap-2 rounded-full border border-line bg-card px-3 py-2 focus-within:border-primary/40">
               <FaMagnifyingGlass className="h-4 w-4 text-muted" />
@@ -361,7 +288,10 @@ export default function SupportPage() {
                 className="w-full bg-transparent text-sm text-white placeholder:text-muted focus:outline-none"
               />
               {faqQ && (
-                <button onClick={() => setFaqQ("")} className="rounded-full bg-white/10 px-2 py-1 text-xs text-white hover:bg-white/20">
+                <button
+                  onClick={() => setFaqQ("")}
+                  className="rounded-full bg-white/10 px-2 py-1 text-xs text-white hover:bg-white/20"
+                >
                   Clear
                 </button>
               )}
@@ -375,7 +305,9 @@ export default function SupportPage() {
                 onClick={() => setFaqCat(c)}
                 className={cx(
                   "rounded-full border px-3 py-1.5 text-xs font-bold tracking-wide transition",
-                  faqCat === c ? "border-primary bg-primary text-white" : "border-line bg-card text-soft hover:border-line2 hover:text-white",
+                  faqCat === c
+                    ? "border-primary bg-primary text-white"
+                    : "border-line bg-card text-soft hover:border-line2 hover:text-white",
                 )}
               >
                 {c}
@@ -386,8 +318,12 @@ export default function SupportPage() {
           <div className="grid gap-3 lg:grid-cols-2">
             {filteredFaqs.length === 0 ? (
               <div className="col-span-full rounded-2xl border border-dashed border-line bg-card/40 px-6 py-10 text-center">
-                <p className="text-sm font-semibold text-white">No results for “{faqQ}”</p>
-                <p className="mt-1 text-xs text-muted">Try “buffer”, “429”, “download”, or ask below.</p>
+                <p className="text-sm font-semibold text-white">
+                  No results for “{faqQ}”
+                </p>
+                <p className="mt-1 text-xs text-muted">
+                  Try “buffer”, “429”, “download”, or ask below.
+                </p>
               </div>
             ) : (
               filteredFaqs.map((faq, i) => {
@@ -397,7 +333,9 @@ export default function SupportPage() {
                     key={faq.question}
                     className={cx(
                       "group rounded-2xl border bg-card p-4 transition-all duration-300",
-                      isOpen ? "border-primary/30 bg-card shadow-[0_10px_30px_rgba(0,0,0,0.25)]" : "border-line hover:border-line2",
+                      isOpen
+                        ? "border-primary/30 bg-card shadow-[0_10px_30px_rgba(0,0,0,0.25)]"
+                        : "border-line hover:border-line2",
                     )}
                   >
                     <button
@@ -405,21 +343,39 @@ export default function SupportPage() {
                       className="flex w-full items-start justify-between gap-4 text-left"
                       aria-expanded={isOpen}
                     >
-                      <span className={cx("text-sm font-semibold leading-snug", isOpen ? "text-white" : "text-white/90 group-hover:text-white")}>
+                      <span
+                        className={cx(
+                          "text-sm font-semibold leading-snug",
+                          isOpen
+                            ? "text-white"
+                            : "text-white/90 group-hover:text-white",
+                        )}
+                      >
                         {faq.question}
                       </span>
                       <span
                         className={cx(
                           "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs transition",
-                          isOpen ? "border-primary bg-primary text-white" : "border-line bg-background text-muted group-hover:border-line2",
+                          isOpen
+                            ? "border-primary bg-primary text-white"
+                            : "border-line bg-background text-muted group-hover:border-line2",
                         )}
                       >
                         {isOpen ? "−" : "+"}
                       </span>
                     </button>
-                    <div className={cx("grid transition-all duration-300", isOpen ? "mt-3 grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0")}>
+                    <div
+                      className={cx(
+                        "grid transition-all duration-300",
+                        isOpen
+                          ? "mt-3 grid-rows-[1fr] opacity-100"
+                          : "grid-rows-[0fr] opacity-0",
+                      )}
+                    >
                       <div className="overflow-hidden">
-                        <p className="pr-8 text-sm leading-relaxed text-muted">{faq.answer}</p>
+                        <p className="pr-8 text-sm leading-relaxed text-muted">
+                          {faq.answer}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -431,52 +387,57 @@ export default function SupportPage() {
       </section>
 
       {/* ---------- CONTACT — alive form + info ---------- */}
-      <section id="contact-form" className="section-gutter mx-auto w-full max-w-[1920px] pb-14 2xl:pb-20">
+      <section
+        id="contact-form"
+        className="section-gutter mx-auto w-full max-w-[1920px] pb-14 2xl:pb-20"
+      >
         <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
           {/* left: form */}
-          <form onSubmit={onSubmit} className="relative overflow-hidden rounded-[24px] border border-line bg-card p-6 sm:p-8">
+          <form
+            onSubmit={onSubmit}
+            className="relative overflow-hidden rounded-[10px] border border-line bg-card p-6 sm:p-8"
+          >
             <div className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-primary/10 blur-2xl" />
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h3 className="text-xl font-extrabold text-white">Send us a message</h3>
-                <p className="mt-1 text-sm text-muted">We read every message. You&apos;ll get a GitHub issue link + we&apos;re pinged on phone.</p>
+                <h3 className="text-xl font-extrabold text-white">
+                  Send me a message
+                </h3>
+                <p className="mt-1 text-sm text-muted">
+                  I gurantee you that I read all messages. They get posted also
+                  on our github issue page
+                </p>
               </div>
-              <span className="hidden items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-bold text-emerald-400 sm:inline-flex">
-                <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" /> Avg 2h
-              </span>
             </div>
 
             {/* honeypot — invisible */}
-            <input value={hp} onChange={(e) => setHp(e.target.value)} className="hidden" tabIndex={-1} autoComplete="off" aria-hidden />
+            <input
+              value={hp}
+              onChange={(e) => setHp(e.target.value)}
+              className="hidden"
+              tabIndex={-1}
+              autoComplete="off"
+              aria-hidden
+            />
 
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <div className="mt-6 ">
               <label className="flex flex-col gap-2">
-                <span className="text-xs font-bold tracking-widest text-muted">FULL NAME</span>
+                <span className="text-xs font-bold tracking-widest text-muted">
+                  NAME (Optional)
+                </span>
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Ada Lovelace"
-                  required
                   className="rounded-xl border border-line bg-surface px-4 py-3 text-sm text-white placeholder:text-muted focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/10"
                 />
-                <span className="text-xs text-muted/70">{name.length ? `${name.length} chars` : "What should we call you?"}</span>
-              </label>
-              <label className="flex flex-col gap-2">
-                <span className="text-xs font-bold tracking-widest text-muted">EMAIL</span>
-                <input
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="ada@example.com"
-                  type="email"
-                  required
-                  className="rounded-xl border border-line bg-surface px-4 py-3 text-sm text-white placeholder:text-muted focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/10"
-                />
-                <span className="text-xs text-muted/70">We&apos;ll reply here (no newsletter, ever).</span>
               </label>
             </div>
 
             <label className="mt-4 flex flex-col gap-2">
-              <span className="text-xs font-bold tracking-widest text-muted">CATEGORY</span>
+              <span className="text-xs font-bold tracking-widest text-muted">
+                CATEGORY
+              </span>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
@@ -492,23 +453,25 @@ export default function SupportPage() {
 
             <label className="mt-4 flex flex-col gap-2">
               <span className="flex items-center justify-between text-xs font-bold tracking-widest text-muted">
-                MESSAGE <span className={cx("font-normal", message.length > 1800 ? "text-amber-400" : "text-muted")}>{message.length}/2000</span>
+                MESSAGE{" "}
+                <span
+                  className={cx(
+                    "font-normal",
+                    message.length > 1800 ? "text-amber-400" : "text-muted",
+                  )}
+                >
+                  {message.length}/2000
+                </span>
               </span>
               <textarea
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                placeholder="Tell us what happened — include the title, what you clicked, and any error you saw (e.g. 429, 426, 91% stuck)…"
+                placeholder="Tell me what happened — include the title, what you clicked, and any error you saw (e.g. 429, 426, 91% stuck)…"
                 rows={5}
                 maxLength={2000}
                 required
                 className="resize-none rounded-xl border border-line bg-surface px-4 py-3 text-sm leading-relaxed text-white placeholder:text-muted focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/10"
               />
-              {/* live typing preview bubble */}
-              {message.trim().length > 0 && (
-                <span className="inline-flex items-center gap-2 rounded-full bg-white/5 px-3 py-1 text-xs text-muted">
-                  <span className="h-2 w-2 animate-bounce rounded-full bg-primary" /> Live preview — we&apos;ll quote this in the issue.
-                </span>
-              )}
             </label>
 
             <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -519,7 +482,8 @@ export default function SupportPage() {
               >
                 {sending ? (
                   <>
-                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" /> Sending…
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />{" "}
+                    Sending…
                   </>
                 ) : (
                   <>
@@ -527,8 +491,11 @@ export default function SupportPage() {
                   </>
                 )}
               </button>
-              <span className="text-xs text-muted">or press ⌘+Enter</span>
-              {error && <span className="text-xs font-semibold text-red-400">{error}</span>}
+              {error && (
+                <span className="text-xs font-semibold text-red-400">
+                  {error}
+                </span>
+              )}
               {sent && (
                 <span className="inline-flex items-center gap-2 rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-bold text-emerald-400">
                   <FaCircleCheck className="h-3.5 w-3.5" /> Sent — ID {sent.id}
@@ -550,61 +517,37 @@ export default function SupportPage() {
             </div>
 
             <p className="mt-4 text-xs leading-relaxed text-muted">
-              By sending, you agree we may open a public GitHub issue with your (anonymized) message to track the fix. Email is only used for reply.
+              By sending, you agree I may open a public GitHub issue with your
+              (anonymized) message to track the fix.
             </p>
           </form>
 
           {/* right: info stack */}
           <div className="flex flex-col gap-4">
-            <div className="rounded-[24px] border border-line bg-gradient-to-br from-primary/15 via-card to-card p-6">
-              <h4 className="flex items-center gap-2 text-sm font-extrabold text-white">
-                <FaEnvelope className="h-4 w-4 text-primary" /> What happens next?
-              </h4>
-              <ol className="mt-3 space-y-2 text-sm leading-relaxed text-muted">
-                <li className="flex gap-2">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">1</span>
-                  <span>Your message hits our backend → a GitHub issue (`user-report`) is opened anonymously — no GitHub login needed.</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-xs font-bold text-black">2</span>
-                  <span>We get an instant push on phone via ntfy.sh (`NTFY_TOPIC`).</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-xs font-bold text-black">3</span>
-                  <span>You get the issue ID above — share it if you need to follow up.</span>
-                </li>
-              </ol>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <a
-                  href="https://github.com/ndizeyedavid/mellow-movies/issues"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded-full border border-line bg-card px-3 py-1.5 text-xs font-semibold text-white hover:border-line2"
-                >
-                  View issues
-                </a>
-                <a href="mailto:support@mellowmovies.vercel.app" className="rounded-full bg-primary px-3 py-1.5 text-xs font-bold text-white hover:bg-primary-dark">
-                  Email us
-                </a>
-              </div>
-            </div>
-
-            <div className="rounded-[24px] border border-line bg-card p-6">
+            <div className="rounded-[10px] border border-line bg-card p-6">
               <h4 className="text-sm font-bold text-white">Prefer DMs?</h4>
-              <p className="mt-1 text-sm text-muted">We&apos;re not on Discord/Telegram — use the form or GitHub issues. Response in ~2 hours, 9am–11pm CAT.</p>
+              <p className="mt-1 text-sm text-muted">
+                I am not on Discord/Telegram, use this form or email me
+                directly. I will try to respond in ~2 hours, 9am - 11pm CAT.
+              </p>
               <div className="mt-4 flex gap-2">
                 {[
-                  { label: "Facebook", icon: FaFacebook },
-                  { label: "Instagram", icon: FaInstagram },
-                  { label: "X", icon: FaXTwitter },
-                  { label: "YouTube", icon: FaYoutube },
+                  {
+                    label: "Instagram",
+                    icon: FaInstagram,
+                    url: "https://www.instagram.com/mellow_junior1",
+                  },
+                  {
+                    label: "Github",
+                    icon: FaGithub,
+                    url: "https://www.github.com/ndizeyedavid",
+                  },
                 ].map((s) => (
                   <a
                     key={s.label}
-                    href="#"
+                    href={s.url}
                     aria-label={s.label}
-                    onClick={(e) => e.preventDefault()}
-                    title={`${s.label} — coming soon`}
+                    title={`${s.label}`}
                     className="flex h-10 w-10 items-center justify-center rounded-full border border-line bg-surface text-white transition hover:border-primary/30 hover:text-primary"
                   >
                     <s.icon className="h-4 w-4" />
@@ -613,12 +556,26 @@ export default function SupportPage() {
               </div>
             </div>
 
-            <div className="rounded-[24px] border border-emerald-500/20 bg-emerald-500/10 p-5">
+            <div className="rounded-[10px] border border-emerald-500/20 bg-emerald-500/10 p-5">
               <p className="flex items-center gap-2 text-sm font-bold text-emerald-400">
-                <FaHeart className="h-4 w-4" /> Built with care
+                <FaHeart className="h-4 w-4" /> Note from moi
               </p>
               <p className="mt-1 text-sm leading-relaxed text-muted">
-                Mellow is a one-person project. Your report actually moves the needle — every playback `429/426` or `91% stuck` you send becomes a tracked issue we fix next.
+                Mellow movies is among the projects I have spent months working
+                on. I have invested most of my time and research to make it the
+                way it. But honestly speaking, all this is not because of me. I
+                thank soo much{" "}
+                <a
+                  href="https://github.com/walterwhite-69"
+                  className="text-primary-dark"
+                >
+                  @walterwhite-69
+                </a>{" "}
+                for creating the first intial backend logic, and I also thank
+                heartfully everyone who gave me feedbacks and supported me in
+                development of this proj. Enjoy mellow movies, let me know what
+                you'd like to see change or improved here, and Thank you for
+                using one of my products🙏
               </p>
             </div>
           </div>

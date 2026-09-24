@@ -1,6 +1,5 @@
-import { useRef } from "react";
-import { FaChevronLeft, FaChevronRight, FaXmark, FaTrash } from "react-icons/fa6";
-import MovieCard from "../ui/MovieCard";
+import { FaXmark, FaTrash } from "react-icons/fa6";
+import YouTubeCard from "../ui/YouTubeCard";
 import { useContinueWatching, removeProgressByItemId, clearAllProgress } from "../../store/progress";
 
 /**
@@ -12,73 +11,35 @@ import { useContinueWatching, removeProgressByItemId, clearAllProgress } from ".
  */
 export default function ContinueWatchingRail() {
   const entries = useContinueWatching();
-  const scrollerRef = useRef<HTMLDivElement>(null);
 
   if (entries.length === 0) return null;
 
-  const slide = (dir: 1 | -1) => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    const card = el.querySelector<HTMLElement>("[data-card]");
-    const step = card ? card.offsetWidth + 30 : 300;
-    el.scrollBy({ left: dir * step, behavior: "smooth" });
-  };
-
   return (
-    <div className="flex flex-col gap-7 section-gutter mx-auto w-full max-w-[1920px]">
+    <div className="flex flex-col gap-4 px-6 lg:px-8 xl:px-10">
       <div className="flex items-end justify-between gap-6">
         <div className="flex min-w-0 flex-col gap-2">
-          <h2 className="text-2xl font-bold text-white md:text-3xl xl:text-[32px]">
-            Continue Watching
-          </h2>
-          <p className="text-base text-muted lg:text-lg">Pick up right where you left off</p>
+          <h2 className="text-xl font-bold text-white lg:text-2xl">Continue Watching</h2>
+          <p className="text-sm text-muted">Pick up right where you left off</p>
         </div>
 
-        <div className="flex shrink-0 items-center gap-3">
-          <button
-            onClick={() => {
-              if (confirm("Clear all Continue Watching?")) clearAllProgress();
-            }}
-            aria-label="Clear all Continue Watching"
-            title="Clear all"
-            className="flex h-11 w-11 items-center justify-center rounded-lg border border-line bg-card text-white transition-colors hover:border-red-500/40 hover:text-red-400"
-          >
-            <FaTrash className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => slide(-1)}
-            aria-label="Scroll Continue Watching left"
-            className="flex h-11 w-11 items-center justify-center rounded-lg border border-line bg-card text-white transition-colors hover:border-line2 hover:text-primary"
-          >
-            <FaChevronLeft className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => slide(1)}
-            aria-label="Scroll Continue Watching right"
-            className="flex h-11 w-11 items-center justify-center rounded-lg border border-line bg-card text-white transition-colors hover:border-line2 hover:text-primary"
-          >
-            <FaChevronRight className="h-4 w-4" />
-          </button>
-        </div>
+        <button
+          onClick={() => {
+            if (confirm("Clear all Continue Watching?")) clearAllProgress();
+          }}
+          aria-label="Clear all Continue Watching"
+          title="Clear all"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-card text-white transition-colors hover:border-red-500/40 hover:text-red-400"
+        >
+          <FaTrash className="h-4 w-4" />
+        </button>
       </div>
 
-      <div
-        ref={scrollerRef}
-        className="-mx-5 flex snap-x snap-mandatory gap-[30px] overflow-x-auto px-5 pb-2 sm:-mx-8 sm:px-8 lg:mx-0 lg:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-      >
+      <div className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {entries.map((e) => {
           const progress = !e.duration ? undefined : Math.min(e.position / e.duration, 1);
           return (
-            <div
-              key={e.item.id}
-              data-card
-              className="group/card relative w-[240px] shrink-0 snap-start sm:w-[260px] lg:w-[237px] xl:w-[296px]"
-            >
-              <MovieCard
-                item={e.item}
-                to={`/watch/${e.item.id}`}
-                progress={progress}
-              />
+            <div key={e.item.id} className="group/card relative">
+              <YouTubeCard item={e.item} progress={progress} />
               <button
                 onClick={(ev) => {
                   ev.preventDefault();

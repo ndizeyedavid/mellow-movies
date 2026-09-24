@@ -20,7 +20,7 @@ export default function MyListPage() {
       <PageHero
         kicker="Your Watchlist"
         title="My List"
-        description="Titles you saved for later. Pick up right where you left off — stored privately in your browser."
+        description="All the movies and shows you've bookmarked to watch. Pick up exactly where you left off, with your entire list stored securely and privately in your Computer."
       />
 
       <section className="py-14 2xl:py-20">
@@ -48,7 +48,7 @@ export default function MyListPage() {
                   You can also hit "Add to List" on any title page.
                 </p>
               </div>
-              <Link to="/browse">
+              <Link to="/movies">
                 <Button size="lg">Browse Movies & Shows</Button>
               </Link>
             </div>

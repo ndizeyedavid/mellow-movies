@@ -37,9 +37,9 @@ import backIcon from "../assets/icon-arrow-left.svg";
 
 /** Highest first — 1080 > 720 > 480 > 360. Keys matched case-insensitively. */
 const RES_PRIORITY: Record<string, number> = {
-  "1080P": 4,
+  "480P": 4,
   "720P": 3,
-  "480P": 2,
+  "1080P": 2,
   "360P": 1,
 };
 
@@ -491,21 +491,13 @@ function WatchContent({ item }: { item: MediaItem }) {
   const actionBar = (
     <div className="mt-5 flex flex-wrap gap-3">
       <button
-        onClick={handleTimestampShare}
-        className="inline-flex items-center gap-2 rounded-lg border border-line bg-card px-4 py-2 text-sm font-semibold text-white hover:border-line2 hover:text-primary"
-        title="Copy link with timestamp"
-      >
-        <FaArrowUpRightFromSquare className="h-3.5 w-3.5" />
-        Share
-      </button>
-      <button
         onClick={handleDownload}
         disabled={loadingStream || !streamSrcs.length}
         className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
         title="Download current quality via proxy"
       >
         <FaDownload className="h-3.5 w-3.5" />
-        Download {streamLabels[0] || "MP4"}
+        Download
       </button>
       <button
         onClick={() => {
@@ -659,7 +651,7 @@ function WatchContent({ item }: { item: MediaItem }) {
         className={
           isBoxed
             ? "mt-14 2xl:mt-20"
-            : "section-gutter mx-auto w-full max-w-[1920px] mt-14 2xl:mt-20"
+            : "mx-auto w-full max-w-[1920px] mt-14 2xl:mt-20"
         }
       >
         {watchNext}

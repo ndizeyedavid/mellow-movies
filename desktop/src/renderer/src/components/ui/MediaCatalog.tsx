@@ -1,12 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import HeroCarousel from "./HeroCarousel";
-import MediaGrid from "./MediaGrid";
+import YouTubeCard from "./YouTubeCard";
 import { FaAngleDown } from "react-icons/fa6";
 import { fetchCatalog } from "../../api/client";
 import { mapApiItems } from "../../api/media";
 import type { MediaItem } from "../../data/mockData";
 import { categories } from "../../data/mockData";
-import PageHero from "./PageHero";
 
 export type SortKey = "popular" | "rating" | "year" | "az";
 
@@ -14,7 +13,6 @@ interface MediaCatalogProps {
   title: string;
   kicker: string;
   description: string;
-  /** Which API catalog to load. */
   kind: "movies" | "tv-series";
 }
 
@@ -26,220 +24,176 @@ const SORTS: Array<{ key: SortKey; label: string }> = [
 ];
 
 /**
- * Reusable catalog layout for the "Movies" and "TV Shows" open pages:
- * hero banner, sort dropdown, responsive grid and pagination controls.
- * Fetches each page from the API as you navigate.
+ * Desktop MediaCatalog — YouTube-style infinite grid.
+ * No pagination buttons; scroll to load more (IntersectionObserver).
+ * Uses YouTubeCard (16:9) in a responsive grid for performance.
  */
 export default function MediaCatalog({
-  title,
-  kicker,
-  description,
+  title: _title,
+  kicker: _kicker,
+  description: _description,
   kind,
 }: MediaCatalogProps) {
   const [sort, setSort] = useState<SortKey>("popular");
-  const [page, setPage] = useState(1);
   const [genre, setGenre] = useState("ALL");
-  const [snap, setSnap] = useState<{
-    page: number;
-    genre: string;
-    items: MediaItem[];
-    total: number;
-    perPage: number;
-  }>({ page: 0, genre: "ALL", items: [], total: 0, perPage: 24 });
+  const [items, setItems] = useState<MediaItem[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  const fetchPage = useCallback(
+    async (p: number, replace: boolean) => {
+      if (replace) setLoading(true);
+      else setLoadingMore(true);
+      try {
+        const res = await fetchCatalog(kind, p, genre);
+        let list = mapApiItems(res.items, kind === "movies" ? "movie" : "show");
+        if (sort === "rating")
+          list = [...list].sort(
+            (a, b) => Number(b.rating ?? 0) - Number(a.rating ?? 0),
+          );
+        else if (sort === "year")
+          list = [...list].sort((a, b) => (b.year ?? 0) - (a.year ?? 0));
+        else if (sort === "az")
+          list = [...list].sort((a, b) => a.title.localeCompare(b.title));
+        setItems((prev) => (replace ? list : [...prev, ...list]));
+        setTotal(res.total);
+        setHasMore(list.length >= 24 && p * 24 < res.total);
+        setPage(p);
+      } catch {
+        setHasMore(false);
+      } finally {
+        setLoading(false);
+        setLoadingMore(false);
+      }
+    },
+    [kind, genre, sort],
+  );
 
   useEffect(() => {
-    let alive = true;
-    fetchCatalog(kind, page, genre)
-      .then((res) => {
-        if (!alive) return;
-        setSnap({
-          page,
-          genre,
-          items: mapApiItems(res.items, kind === "movies" ? "movie" : "show"),
-          total: res.total,
-          perPage: res.per_page,
-        });
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, [kind, page, genre]);
+    setItems([]);
+    setPage(1);
+    setHasMore(true);
+    fetchPage(1, true);
+  }, [fetchPage]);
 
-  // Derived: still loading until the snapshot matches the requested filter.
-  const loading = snap.page !== page || snap.genre !== genre;
-  const total = snap.total;
-  const perPage = snap.perPage;
-
-  const sorted = useMemo(() => {
-    const list =
-      snap.page === page && snap.genre === genre ? [...snap.items] : [];
-    switch (sort) {
-      case "rating":
-        return list.sort(
-          (a, b) => Number(b.rating ?? 0) - Number(a.rating ?? 0),
-        );
-      case "year":
-        return list.sort((a, b) => (b.year ?? 0) - (a.year ?? 0));
-      case "az":
-        return list.sort((a, b) => a.title.localeCompare(b.title));
-      default:
-        return list;
-    }
-  }, [snap, page, sort, genre]);
-
-  // First five fetched titles back the hero carousel (in the catalog's
-  // recommended order); the grid below skips them so nothing repeats.
-  const heroItems = useMemo(() => {
-    if (snap.page !== page || snap.genre !== genre) return [];
-    return snap.items.slice(0, 5);
-  }, [snap, page, genre]);
-
-  const gridItems = useMemo(() => {
-    if (heroItems.length === 0 || sorted.length <= heroItems.length)
-      return sorted;
-    const heroIds = new Set(heroItems.map((i) => i.id));
-    return sorted.filter((i) => !heroIds.has(i.id));
-  }, [sorted, heroItems]);
-
-  const totalPages = Math.max(1, Math.ceil(total / perPage));
+  useEffect(() => {
+    if (!hasMore || loading || loadingMore) return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) fetchPage(page + 1, false);
+      },
+      { rootMargin: "800px 0px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [hasMore, loading, loadingMore, page, fetchPage]);
 
   return (
     <>
-      <div className="hidden">
-        <PageHero kicker={kicker} title={title} description={description} />
-      </div>
-
-      {/* Featured carousel — prev/next arrows, autoplay, segmented dots */}
-      <section className="pt-8 2xl:pt-12">
-        <div className="section-gutter mx-auto w-full max-w-[1920px]">
-          {loading ? (
-            <div
-              aria-hidden="true"
-              className="h-[420px] w-full animate-pulse rounded-2xl bg-card2 sm:h-[480px] lg:h-[540px] 2xl:h-[560px]"
-            />
-          ) : heroItems.length > 0 ? (
-            <HeroCarousel items={heroItems} />
-          ) : null}
-        </div>
+      {/* Full-bleed hero */}
+      <section className="w-full">
+        {loading && items.length === 0 ? (
+          <div className="h-[520px] w-full animate-pulse bg-card2 lg:h-[600px] xl:h-[640px]" />
+        ) : items.length > 0 ? (
+          <HeroCarousel items={items.slice(0, 5)} fullBleed />
+        ) : null}
       </section>
 
-      <section className="flex flex-col gap-10 py-14 2xl:py-20">
-        <div className="section-gutter mx-auto flex w-full max-w-[1920px] flex-col gap-10">
-          {/* Toolbar */}
-          <div className="flex flex-wrap items-center justify-between gap-6">
-            <p className="text-lg text-muted">
-              Showing{" "}
-              <span className="font-semibold text-white">
-                {total.toLocaleString()}
-              </span>{" "}
-              titles
-            </p>
-            <div className="relative">
-              <label htmlFor="sort-select" className="sr-only">
-                Sort by
-              </label>
-              <select
-                id="sort-select"
-                value={sort}
-                onChange={(e) => {
-                  setSort(e.target.value as SortKey);
-                  setPage(1);
-                }}
-                className="appearance-none rounded-lg border border-line bg-card py-3.5 pl-6 pr-12 text-lg text-white outline-none transition-colors duration-200 hover:border-line2 focus:border-line2"
-              >
-                {SORTS.map((s) => (
-                  <option key={s.key} value={s.key}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
-              <FaAngleDown
-                aria-hidden="true"
-                className="pointer-events-none absolute right-5 top-1/2 h-5 w-5 -translate-y-1/2 text-muted"
-              />
-            </div>
-          </div>
-
-          {/* Genre filter chips */}
-          <div
-            className="flex flex-wrap gap-2.5"
-            role="group"
-            aria-label="Filter by genre"
-          >
-            <button
-              onClick={() => {
-                setGenre("ALL");
-                setPage(1);
+      <section className="flex flex-col gap-6 px-6 py-8 lg:px-8 xl:px-10">
+        {/* Toolbar */}
+        <div className="flex flex-wrap items-center justify-between gap-6">
+          <p className="text-sm text-muted">
+            <span className="font-semibold text-white">
+              {total.toLocaleString()}
+            </span>{" "}
+            titles
+            {hasMore ? " · scroll for more" : ""}
+          </p>
+          <div className="relative">
+            <label htmlFor="sort-select" className="sr-only">
+              Sort by
+            </label>
+            <select
+              id="sort-select"
+              value={sort}
+              onChange={(e) => {
+                setSort(e.target.value as SortKey);
               }}
-              aria-pressed={genre === "ALL"}
-              className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors duration-200 ${
-                genre === "ALL"
+              className="appearance-none rounded-lg border border-line bg-card py-2.5 pl-4 pr-10 text-sm text-white outline-none hover:border-line2"
+            >
+              {SORTS.map((s) => (
+                <option key={s.key} value={s.key}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+            <FaAngleDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+          </div>
+        </div>
+
+        {/* Genre chips */}
+        <div
+          className="flex flex-wrap gap-2"
+          role="group"
+          aria-label="Filter by genre"
+        >
+          {["ALL", ...categories].map((g) => (
+            <button
+              key={g}
+              onClick={() => setGenre(g)}
+              aria-pressed={genre === g}
+              className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+                genre === g
                   ? "border-primary bg-primary text-white"
                   : "border-line bg-card text-soft hover:border-line2 hover:text-white"
               }`}
             >
-              All
+              {g === "ALL" ? "All" : g}
             </button>
-            {categories.map((g) => (
-              <button
-                key={g}
-                onClick={() => {
-                  setGenre(g);
-                  setPage(1);
-                }}
-                aria-pressed={genre === g}
-                className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors duration-200 ${
-                  genre === g
-                    ? "border-primary bg-primary text-white"
-                    : "border-line bg-card text-soft hover:border-line2 hover:text-white"
-                }`}
-              >
-                {g}
-              </button>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4">
+          {items.map((item) => (
+            <YouTubeCard key={item.id} item={item} />
+          ))}
+          {loading &&
+            Array.from({ length: 8 }).map((_, i) => (
+              <div
+                key={`sk-${i}`}
+                className="aspect-video animate-pulse rounded-xl bg-card2"
+              />
+            ))}
+        </div>
+
+        {loadingMore && (
+          <div className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div
+                key={`more-${i}`}
+                className="aspect-video animate-pulse rounded-xl bg-card2"
+              />
             ))}
           </div>
+        )}
 
-          {loading ? (
-            <div className="grid grid-cols-1 gap-[30px] sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-              {Array.from({ length: 10 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="h-[300px] animate-pulse rounded-xl bg-card2 sm:h-[330px]"
-                />
-              ))}
-            </div>
-          ) : (
-            <MediaGrid items={gridItems} />
-          )}
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <nav
-              aria-label="Pagination"
-              className="flex items-center justify-center gap-4"
-            >
-              <button
-                disabled={page === 1}
-                onClick={() => setPage((p) => p - 1)}
-                className="rounded-lg border border-line bg-card px-5 py-3 text-lg text-soft transition-colors duration-200 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Prev
-              </button>
-              <span className="text-lg text-muted">
-                Page <span className="font-semibold text-white">{page}</span> of{" "}
-                {totalPages.toLocaleString()}
-              </span>
-              <button
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => p + 1)}
-                className="rounded-lg border border-line bg-card px-5 py-3 text-lg text-soft transition-colors duration-200 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Next
-              </button>
-            </nav>
-          )}
-        </div>
+        <div ref={sentinelRef} className="h-2" />
+        {!hasMore && items.length > 0 && (
+          <p className="py-2 text-center text-xs text-muted">
+            All caught up — {items.length} titles
+          </p>
+        )}
+        {!loading && items.length === 0 && (
+          <p className="py-10 text-center text-sm text-muted">
+            No titles found.
+          </p>
+        )}
       </section>
     </>
   );

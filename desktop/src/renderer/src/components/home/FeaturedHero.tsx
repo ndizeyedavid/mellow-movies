@@ -49,18 +49,15 @@ export default function FeaturedHero() {
     };
   }, []);
 
+  // Full-bleed to sidebar: no section-gutter, no max-width, flush to edges.
+  // Feels welcoming with edge-to-edge backdrop + overlay.
   return (
-    <section className="pt-8 2xl:pt-12">
-      <div className="section-gutter mx-auto w-full max-w-[1920px]">
-        {!loaded ? (
-          <div
-            aria-hidden="true"
-            className="h-[420px] w-full animate-pulse rounded-2xl bg-card2 sm:h-[480px] lg:h-[540px] 2xl:h-[560px]"
-          />
-        ) : (
-          <HeroCarousel items={items} />
-        )}
-      </div>
+    <section className="w-full">
+      {!loaded ? (
+        <div aria-hidden="true" className="h-[420px] w-full animate-pulse bg-card2 sm:h-[480px] lg:h-[560px] xl:h-[600px]" />
+      ) : (
+        <HeroCarousel items={items} fullBleed />
+      )}
     </section>
   );
 }

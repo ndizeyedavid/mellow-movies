@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { FaPlay } from "react-icons/fa6";
 import type { MediaItem } from "../../data/mockData";
+import watchingGif from "../../assets/watching.gif";
 
 interface EpisodePanelProps {
   item: MediaItem;
@@ -103,7 +104,7 @@ export default function EpisodePanel({
                 </span>
                 {active && (
                   // <FaCheck className="h-4 w-4 shrink-0 text-primary" />
-                  <img src="/animations/watching.gif" className="size-10" />
+                  <img src={watchingGif} className="size-10" />
                 )}
               </button>
             </li>

@@ -13,10 +13,12 @@ import playIcon from "../../assets/icon-play.svg";
 interface HeroCarouselProps {
   items: MediaItem[];
   autoPlayMs?: number;
+  /** Full-bleed to sidebar edge (no rounded corners / outer border). */
+  fullBleed?: boolean;
 }
 
 const glassBtn =
-  "flex h-10 w-10 items-center justify-center rounded-lg border border-white/15 bg-black/50 text-white backdrop-blur-md transition-colors duration-200 hover:border-white/30 hover:bg-black/70 sm:h-12 sm:w-12";
+  "flex h-10 px-2 w-fit items-center justify-center rounded-lg border border-white/15 bg-black/50 text-white backdrop-blur-md transition-colors duration-200 hover:border-white/30 hover:bg-black/70 sm:h-12 ";
 
 /**
  * MovieBox-style hero carousel banner:
@@ -27,6 +29,7 @@ const glassBtn =
 export default memo(function HeroCarousel({
   items,
   autoPlayMs = 6500,
+  fullBleed = false,
 }: HeroCarouselProps) {
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -65,7 +68,7 @@ export default memo(function HeroCarousel({
       onMouseLeave={() => setPaused(false)}
       aria-roledescription="carousel"
       aria-label="Featured titles"
-      className="relative h-[420px] w-full overflow-hidden rounded-2xl border border-line sm:h-[480px] lg:h-[540px] 2xl:h-[560px]"
+      className={`relative w-full overflow-hidden ${fullBleed ? "h-[520px] lg:h-[600px] xl:h-[640px] border-b border-line" : "h-[420px] rounded-2xl border border-line sm:h-[480px] lg:h-[540px] 2xl:h-[560px]"}`}
     >
       {/* Stacked poster slides — crossfade */}
       {items.map((item, i) =>
@@ -107,14 +110,14 @@ export default memo(function HeroCarousel({
       <button
         onClick={() => go(-1)}
         aria-label="Previous featured title"
-        className={`${glassBtn} absolute left-4 top-1/2 z-10 -translate-y-1/2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary`}
+        className={`${glassBtn} rounded-full! size-10! absolute left-4 top-1/2 z-10 -translate-y-1/2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary`}
       >
         <FaChevronLeft className="h-5 w-5" />
       </button>
       <button
         onClick={() => go(1)}
         aria-label="Next featured title"
-        className={`${glassBtn} absolute right-4 top-1/2 z-10 -translate-y-1/2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary`}
+        className={`${glassBtn} rounded-full! size-10! absolute right-4 top-1/2 z-10 -translate-y-1/2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary`}
       >
         <FaChevronRight className="h-5 w-5" />
       </button>
@@ -153,13 +156,7 @@ export default memo(function HeroCarousel({
             ) : (
               <FaPlus className="h-5 w-5" />
             )}
-          </button>
-          <button
-            onClick={() => setLiked((v) => !v)}
-            aria-label={liked ? "Unlike" : "Like"}
-            className={glassBtn}
-          >
-            <FaThumbsUp className={`h-5 w-5 ${liked ? "text-primary" : ""}`} />
+            Add to my list
           </button>
         </div>
 

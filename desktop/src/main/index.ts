@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, protocol, net, session } from "electron";
+import { app, BrowserWindow, ipcMain, protocol, net, session, shell } from "electron";
 import { join } from "path";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { autoUpdater } from "electron-updater";
@@ -75,7 +75,26 @@ function createWindow(): void {
     return new Response("not found", { status: 404 });
   });
 
-  // Fallback: also patch bcdn/hakunaymatata Referer via webRequest for direct <video src="https://bcdnxw...">
+  // External links → OS default browser, not the app window.
+  // Handles <a target="_blank" href="https://..."> and window.open.
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith("https://") || url.startsWith("http://")) {
+      shell.openExternal(url);
+    }
+    return { action: "deny" };
+  });
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    const isAppUrl = url.startsWith("file://") || url.startsWith("mellow://");
+    const isDevUrl = is.dev && url.startsWith("http://localhost:");
+    if (!isAppUrl && !isDevUrl) {
+      event.preventDefault();
+      if (url.startsWith("https://") || url.startsWith("http://")) {
+        shell.openExternal(url);
+      }
+    }
+  });
+
+  // Patch bcdn/hakunaymatata Referer via webRequest for direct <video src="https://bcdnxw...">
   // Use broad filter and check hostname inside, because Chromium URL patterns
   // only allow "*://*.example.com/*" wildcards, not "*://bcdn*/*".
   session.defaultSession.webRequest.onBeforeSendHeaders(

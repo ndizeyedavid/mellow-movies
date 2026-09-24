@@ -12,7 +12,6 @@ import { useOgMeta } from "../hooks/useOgMeta";
 import Container from "../components/ui/Container";
 import Button from "../components/ui/Button";
 import MovieCard from "../components/ui/MovieCard";
-import ShareButton from "../components/ui/ShareButton";
 import EpisodePanel from "../components/player/EpisodePanel";
 import playIcon from "../assets/icon-play.svg";
 import backIcon from "../assets/icon-arrow-left.svg";
@@ -258,7 +257,6 @@ export default function TitleDetailPage() {
             >
               {added ? "In Your List" : "Add to List"}
             </Button>
-            <ShareButton title={item.title} />
           </div>
         </Container>
       </section>

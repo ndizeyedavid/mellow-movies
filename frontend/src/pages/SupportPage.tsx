@@ -90,7 +90,7 @@ export default function SupportPage() {
     });
   }, [faqQ, faqCat]);
 
-  const canSubmit = name.trim().length >= 2 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && message.trim().length >= 10 && !sending;
+  const canSubmit = message.trim().length >= 10 && !sending;
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -456,7 +456,6 @@ export default function SupportPage() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Ada Lovelace"
-                  required
                   className="rounded-xl border border-line bg-surface px-4 py-3 text-sm text-white placeholder:text-muted focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/10"
                 />
                 <span className="text-xs text-muted/70">{name.length ? `${name.length} chars` : "What should we call you?"}</span>

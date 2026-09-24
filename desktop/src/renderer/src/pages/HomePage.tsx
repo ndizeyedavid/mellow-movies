@@ -17,7 +17,7 @@ export default function HomePage() {
   return (
     <>
       <FeaturedHero />
-      <div className="section-stack pt-10 md:pt-14 2xl:pt-16">
+      <div className="section-stack px-6 pt-8 lg:px-8 xl:px-10">
         <ContinueWatchingRail />
         <MyListRail />
         <TopTenRail />
@@ -25,11 +25,7 @@ export default function HomePage() {
         <CatalogRail title="Action & Adventure" kind="movies" genre="Action" />
         <CatalogRail title="Comedy Gold" kind="movies" genre="Comedy" />
         <CatalogRail title="New Releases" kind="movies" sort="year" />
-        <CatalogRail
-          title="Popular Series"
-          kind="tv-series"
-          sort="rating"
-        />
+        <CatalogRail title="Popular Series" kind="tv-series" sort="rating" />
         <CatalogRail title="Nightmare Fuel" kind="movies" genre="Horror" />
         <CatalogRail title="Out of This World" kind="movies" genre="Sci-Fi" />
         <CatalogRail title="Edge of Your Seat" kind="movies" genre="Thriller" />
