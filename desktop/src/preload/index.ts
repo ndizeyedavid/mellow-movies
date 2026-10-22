@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer } from "electron";
 export interface IElectronAPI {
   fetchMediaHeaders: (url: string, range?: string) => Promise<{ ok: boolean; status: number; headers: Record<string, string>; error?: string }>;
   getStreamUrls: (detailPath: string, se: number, ep: number) => Promise<unknown>;
+  getDirectBase: () => Promise<string>;
   getVersion: () => Promise<string>;
   checkForUpdates: () => Promise<string | null>;
   downloadUpdate: () => Promise<void>;
@@ -25,6 +26,7 @@ export interface IElectronAPI {
 const api: IElectronAPI = {
   fetchMediaHeaders: (url, range) => ipcRenderer.invoke("fetch-media-headers", url, range),
   getStreamUrls: (detailPath, se, ep) => ipcRenderer.invoke("get-stream-urls", detailPath, se, ep),
+  getDirectBase: () => ipcRenderer.invoke("direct-base"),
   getVersion: () => ipcRenderer.invoke("get-version"),
   checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
   downloadUpdate: () => ipcRenderer.invoke("download-update"),

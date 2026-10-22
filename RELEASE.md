@@ -6,6 +6,18 @@
 
 ---
 
+## [1.1.6] - 2026-10-22
+
+### Patch - Play without the residential proxy
+
+Streams now play even when the home proxy / backend proxy pool is offline:
+
+- **Real client-direct playback:** the desktop app fetches CDN bytes from your own residential IP through a loopback media server (`127.0.0.1`, random port, per-launch token) instead of depending on the backend proxy. HLS manifests are rewritten so child playlists, segments and keys stay local, with the backend proxy kept as an automatic fallback.
+- **Fixed the false fallback:** the backend pre-proxifies every stream URL, so the previous direct candidate was byte-identical to the proxied one. Sources are now unwrapped and rebuilt as genuine direct vs proxy candidates.
+- **Fixed direct fetches:** removed the `Origin` header that made Electron `net.fetch` fail with `net::ERR_FAILED` for CDN media and downloads.
+- **HLS scheme registered:** `mellow://` is now a privileged scheme so it can serve media.
+- **No more endless spinner:** stream resolution now times out with a retryable error screen and a Try again button, and captions can no longer block playback. Retry restarts the full source ladder.
+
 ## [1.1.5] - 2026-09-24
 
 ### Patch — Fixed known issue on auto-updating

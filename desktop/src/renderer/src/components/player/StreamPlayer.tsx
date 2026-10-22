@@ -23,6 +23,7 @@ import PlayerControls, {
 } from "./PlayerControls";
 import { onMediaKey } from "../../desktopBridge";
 import { supportsNativeHls } from "../../utils/media";
+import { isDashSource, isHlsSource, serverSource, unwrapSource } from "../../utils/source";
 import { loadSubtitlePref, saveSubtitlePref } from "../../utils/subtitlePref";
 import { API_BASE_URL } from "../../api/client";
 
@@ -95,6 +96,10 @@ export default function StreamPlayer({
   // Per-source retry budget. Transient CDN limits (429/5xx) are common, so a
   // source gets a few delayed retries before we move down the candidate list.
   const retryCountRef = useRef(0);
+  // hls.js retries network errors itself; bound those retries per source so a
+  // dead URL (backend proxy offline, CDN 403) advances to the next candidate
+  // instead of looping on the same manifest forever.
+  const hlsNetRetryRef = useRef(0);
   // Last time the playhead advanced — the stall watchdog uses this to tell a
   // stream that's truly dead mid-playback from a brief recoverable blip.
   const lastProgressRef = useRef(0);
@@ -122,8 +127,11 @@ export default function StreamPlayer({
 
   const [srcIndex, setSrcIndex] = useState(0);
   const src = srcs[srcIndex] ?? "";
-  const isDashSrc = /\.mpd(?:\?|$)/i.test(src);
-  const isHlsSrc = /\.m3u8(?:\?|$)/i.test(src);
+  // Sources may be wrapped by the loopback direct server or the backend proxy;
+  // unwrap before sniffing the extension so HLS is still driven by hls.js.
+  const logicalSrc = unwrapSource(src);
+  const isDashSrc = isDashSource(src);
+  const isHlsSrc = isHlsSource(src);
   // Hosted now proxies like local per user request (all srcs are
   // https://mellow-movies.fastapicloud.dev/api/proxy/mp4?u=...), so the
   // previous direct-bcdn blob hack is disabled. isHosted kept for
@@ -134,7 +142,9 @@ export default function StreamPlayer({
     const h = window.location.hostname;
     return h.includes("vercel.app") || h.includes("fastapicloud") || h.includes("netlify");
   }, []);
-  const isBcdnSrc = !src.includes("/api/proxy/") && /hakunaymatata\.com|bcdn/.test(src);
+  const isBcdnSrc =
+    !/\/api\/proxy\/|\/fetch\?u=/.test(src) &&
+    /hakunaymatata\.com|bcdn/.test(logicalSrc);
   const [blobSrc, setBlobSrc] = useState<string | null>(null);
 
   const [reloadKey, setReloadKey] = useState(0);
@@ -211,7 +221,7 @@ export default function StreamPlayer({
         .map((u, i) => ({
           url: u,
           label: srcLabels?.[i] ?? `Source ${i + 1}`,
-          adaptive: /\.(mpd|m3u8)(?:\?|$)/i.test(u),
+          adaptive: isDashSource(u) || isHlsSource(u),
         }))
         .filter((e) => !e.adaptive),
     [srcs, srcLabels],
@@ -359,8 +369,8 @@ export default function StreamPlayer({
   // Effective source: blob: on hosted bcdn* (fetched with correct Referer),
   // otherwise the original src (proxied on local, direct on hosted via SW).
   const effectiveSrc = blobSrc || src;
-  const effectiveIsDash = /\.mpd(?:\?|$)/i.test(effectiveSrc);
-  const effectiveIsHls = /\.m3u8(?:\?|$)/i.test(effectiveSrc);
+  const effectiveIsDash = isDashSource(effectiveSrc);
+  const effectiveIsHls = isHlsSource(effectiveSrc);
   const effectiveUseNativeHls = effectiveIsHls && supportsNativeHls && !useHlsFallback;
 
   useEffect(() => {
@@ -375,6 +385,7 @@ export default function StreamPlayer({
     setError(false);
     setMediaError(null);
     startedRef.current = false;
+    hlsNetRetryRef.current = 0;
 
     const onMetadata = () => {
       setDuration(video.duration || 0);
@@ -538,7 +549,12 @@ export default function StreamPlayer({
         );
         if (!data.fatal) return;
         if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-          hls.startLoad();
+          if (hlsNetRetryRef.current < 2) {
+            hlsNetRetryRef.current += 1;
+            hls.startLoad();
+          } else {
+            fail();
+          }
         } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
           hls.recoverMediaError();
         } else {
@@ -557,7 +573,7 @@ export default function StreamPlayer({
         ? src.startsWith("/")
           ? `${API_BASE_URL}${src}`
           : src
-        : `${API_BASE_URL}/api/proxy/hls?u=${encodeURIComponent(src)}`;
+        : serverSource(API_BASE_URL, unwrapSource(src));
       hls.loadSource(useHlsFallback ? proxiedSrc : src);
       hls.attachMedia(video);
 
@@ -1029,7 +1045,14 @@ export default function StreamPlayer({
           )}
           <div className="flex flex-wrap items-center justify-center gap-3">
             <button
-              onClick={() => setReloadKey((k) => k + 1)}
+              onClick={() => {
+                // Restart the whole candidate ladder, not just the last (likely
+                // proxied) source that already failed.
+                retryCountRef.current = 0;
+                hlsNetRetryRef.current = 0;
+                setSrcIndex(0);
+                setReloadKey((k) => k + 1);
+              }}
               className="flex items-center gap-2 rounded-lg bg-primary px-6 py-3 text-base font-semibold text-white transition-colors hover:bg-primary-dark"
             >
               <FaRotateRight className="h-4 w-4" />

@@ -3,10 +3,27 @@ import { join } from "path";
 import * as fs from "fs";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import { autoUpdater } from "electron-updater";
+import { getDirectBase, startDirectServer } from "./directServer";
 
 // Phase 0 Spike: prove Referer spoof works with correct bcdn URL
 // Phase 1 IPC: Attempt A — client-direct residential fetch via main
 // No python sub-child needed.
+
+// Must run before app is ready. Without this the mellow:// scheme below is
+// unusable for media/fetch requests in the renderer.
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "mellow",
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+      corsEnabled: true,
+      bypassCSP: true,
+    },
+  },
+]);
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -65,7 +82,9 @@ function createWindow(): void {
       // Stream via Node fetch with correct Referer from residential IP
       const headers: Record<string, string> = {
         Referer: "https://moviebox.ph/",
-        Origin: "https://moviebox.ph",
+        // NOTE: do not set `Origin` here. Electron's net.fetch fails with
+        // net::ERR_FAILED when the main process sets it, and the CDN only
+        // checks Referer.
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         Accept: "*/*",
@@ -136,8 +155,14 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   electronApp.setAppUserModelId("com.mellow.movies");
+
+  // Start the loopback direct-media server before the window so the renderer
+  // can resolve direct CDN candidates immediately.
+  await startDirectServer().catch((e) => {
+    console.error("[direct] failed to start:", e);
+  });
 
   app.on("browser-window-created", (_, window) => {
     optimizer.watchWindowShortcuts(window);
@@ -147,7 +172,6 @@ app.whenReady().then(() => {
   ipcMain.handle("fetch-media-headers", async (_e, url: string, range?: string) => {
     const headers: Record<string, string> = {
       Referer: "https://moviebox.ph/",
-      Origin: "https://moviebox.ph",
       Accept: "*/*",
     };
     if (range) headers["Range"] = range;
@@ -169,6 +193,9 @@ app.whenReady().then(() => {
     // We need subjectId — renderer will pass full; for now placeholder
     return { base, detailPath, se, ep, note: "renderer should call backend/api/stream directly via fetch" };
   });
+
+  // Loopback client-direct media server (plays without the backend proxy).
+  ipcMain.handle("direct-base", () => getDirectBase());
 
   // Auto-updater (GitHub Releases, side-load)
   autoUpdater.autoDownload = false;
@@ -277,7 +304,6 @@ app.whenReady().then(() => {
     const headers: Record<string, string> = isDirectBcdn
       ? {
           Referer: "https://moviebox.ph/",
-          Origin: "https://moviebox.ph",
           "User-Agent":
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
           Accept: "*/*",

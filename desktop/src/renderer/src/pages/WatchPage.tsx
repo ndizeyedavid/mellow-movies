@@ -5,17 +5,28 @@ import {
   Link,
   useSearchParams,
 } from "react-router-dom";
-import { FaStar, FaArrowUpRightFromSquare, FaDownload } from "react-icons/fa6";
+import {
+  FaStar,
+  FaArrowUpRightFromSquare,
+  FaDownload,
+  FaRepeat,
+} from "react-icons/fa6";
 import {
   fetchCaptions,
   fetchCatalog,
   fetchDetail,
   fetchStream,
-  proxifyMediaUrl,
   type ApiCaption,
 } from "../api/client";
 import { mapApiItems, mapDetail } from "../api/media";
 import { srtUrlToVttBlob } from "../utils/captions";
+import {
+  directSource,
+  getDirectBase,
+  isDesktop,
+  serverSource,
+  unwrapSource,
+} from "../utils/source";
 import { showToast } from "../utils/toast";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useOgMeta } from "../hooks/useOgMeta";
@@ -69,6 +80,26 @@ function nextEpisode(
     return { season: nextSeason.se, episode: 1 };
   }
   return null;
+}
+
+/** Reject a hung promise so a stalled backend cannot spin forever. */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(
+      () => reject(new Error(`${label} timed out`)),
+      ms,
+    );
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
 }
 
 /**
@@ -167,7 +198,10 @@ function WatchContent({ item }: { item: MediaItem }) {
     srcs: string[];
     labels: string[];
     captions: Array<{ lang: string; label: string; src: string }>;
+    error?: boolean;
   } | null>(null);
+  // Bumped by the "Try again" button after a failed /api/stream resolve.
+  const [streamAttempt, setStreamAttempt] = useState(0);
   const [recommendations, setRecommendations] = useState<MediaItem[]>([]);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportError, setReportError] = useState("");
@@ -190,120 +224,127 @@ function WatchContent({ item }: { item: MediaItem }) {
     if (!item.subjectId) return;
     let alive = true;
     const blobUrls: string[] = [];
-    Promise.all([
-      fetchStream(item.subjectId, item.id, se, ep),
-      fetchCaptions(item.subjectId, item.id, se, ep),
-    ])
-      .then(async ([stream, caps]) => {
-        if (!alive) return;
-        // Candidate order: DASH (moviebox's native path, proxied) → HLS →
-        // direct MP4 (highest resolution first). The player auto-falls back
-        // down the list if one candidate fails to start.
-        const dashEntry = stream.dash.find((d) => d.url);
-        const hlsUrl = stream.hls[0]?.url;
-        // Hosted (Vercel) blob fallback downloads the WHOLE file via a single
-        // fetch, so srcs[0] must be the smallest (360p ~180MB), not 1080p
-        // (~633MB) — faster, less RAM, minimal 429 risk. Local proxy streams
-        // progressively via Range so largest-first is fine there.
-        const hosted =
-          typeof window !== "undefined" &&
-          (window.location.hostname.includes("vercel.app") ||
-            window.location.hostname.includes("fastapicloud") ||
-            window.location.hostname.includes("netlify"));
-        const mp4s = [...stream.sources]
-          .filter((s) => s.url)
-          .sort((a, b) => {
-            const pa = RES_PRIORITY[a.resolution.toUpperCase()] ?? 0;
-            const pb = RES_PRIORITY[b.resolution.toUpperCase()] ?? 0;
-            return hosted ? pa - pb : pb - pa;
-          });
-        const srcs: string[] = [];
-        const labels: string[] = [];
-        // Desktop Attempt A: direct CDN via Electron main with correct Referer.
-        // Fallback B: backend proxy pool (only if direct 429/426). We append
-        // proxied candidates AFTER direct ones, preserving the RES_PRIORITY order.
-        const toProxy = (u: string) => proxifyMediaUrl(u);
-        const toDirect = (u: string) => u;
-        const isDesktopEnv =
-          typeof window !== "undefined" &&
-          !!(window as unknown as { electronAPI?: unknown }).electronAPI;
-        // Respect RES_PRIORITY order (480>720>1080>360) — do NOT reorder.
-        // Desktop Attempt A: direct via Electron main (Referer moviebox.ph),
-        // plus fallback B (proxied) interleaved per-quality so a 429 on 480
-        // direct immediately tries 480 proxied before moving to 720.
-        const isDesktop = isDesktopEnv;
-        const API_BASE_FB =
-          (typeof import.meta !== "undefined" &&
-            (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_API_BASE) ||
-          "https://mellow-movies.fastapicloud.dev";
-        const toProxied = (u: string) => {
-          if (!u) return u;
-          if (u.includes("/api/proxy/")) return u;
-          const isHls = /\.m3u8(?:\?|$)/i.test(u);
-          return `${API_BASE_FB}${isHls ? "/api/proxy/hls" : "/api/proxy/mp4"}?u=${encodeURIComponent(u)}`;
-        };
+    (async () => {
+      // Stream resolution is the critical path; captions are optional and must
+      // never take the whole player down when they fail or time out.
+      const stream = await withTimeout(
+        fetchStream(item.subjectId, item.id, se, ep),
+        20000,
+        "Stream request",
+      );
+      if (!alive) return;
+      const caps = await withTimeout(
+        fetchCaptions(item.subjectId, item.id, se, ep),
+        10000,
+        "Captions request",
+      ).catch(() => ({ captions: [] as ApiCaption[] }));
+      if (!alive) return;
+      // Candidate order on desktop: client-direct (this machine's own IP via
+      // the loopback media server) first, then the backend proxy as fallback.
+      // That keeps playback working when the residential proxy pool / home
+      // tunnel is offline — the failure mode this whole path exists for.
+      // Web stays server-proxied since it cannot spoof the CDN Referer.
+      const dashEntry = stream.dash.find((d) => d.url);
+      const hlsUrl = stream.hls[0]?.url;
+      // Hosted (Vercel) blob fallback downloads the WHOLE file via a single
+      // fetch, so srcs[0] must be the smallest (360p ~180MB), not 1080p
+      // (~633MB) — faster, less RAM, minimal 429 risk. Local proxy streams
+      // progressively via Range so largest-first is fine there.
+      const hosted =
+        typeof window !== "undefined" &&
+        (window.location.hostname.includes("vercel.app") ||
+          window.location.hostname.includes("fastapicloud") ||
+          window.location.hostname.includes("netlify"));
+      const mp4s = [...stream.sources]
+        .filter((s) => s.url)
+        .sort((a, b) => {
+          const pa = RES_PRIORITY[a.resolution.toUpperCase()] ?? 0;
+          const pb = RES_PRIORITY[b.resolution.toUpperCase()] ?? 0;
+          return hosted ? pa - pb : pb - pa;
+        });
+      const srcs: string[] = [];
+      const labels: string[] = [];
+      const API_BASE_FB =
+        (typeof import.meta !== "undefined" &&
+          (import.meta as unknown as { env?: Record<string, string> }).env
+            ?.VITE_API_BASE) ||
+        "https://mellow-movies.fastapicloud.dev";
+      const desktop = isDesktop();
+      const directBase = desktop ? await getDirectBase() : "";
+      const dashLabel = `DASH${dashEntry?.resolutions ? ` · ${dashEntry.resolutions}` : ""}`;
 
-        const pushWithFallback = (url: string, label: string) => {
-          if (isDesktop) {
-            // Direct first (Attempt A), then fallback proxied with same label
-            srcs.push(url);
-            labels.push(label);
-            srcs.push(toProxied(url));
-            labels.push(`${label} (fallback)`);
-          } else {
-            srcs.push(toProxy(url));
-            labels.push(label);
-          }
-        };
+      const pushDirect = (url: string, label: string) => {
+        srcs.push(directSource(directBase, url));
+        labels.push(label);
+      };
+      const pushServer = (url: string, label: string) => {
+        srcs.push(serverSource(API_BASE_FB, url));
+        labels.push(label);
+      };
 
-        if (supportsNativeHls) {
-          if (hlsUrl) pushWithFallback(hlsUrl, "HLS");
-          mp4s.forEach((s) => pushWithFallback(s.url, s.resolution));
-          if (dashEntry)
-            pushWithFallback(
-              dashEntry.url,
-              `DASH${dashEntry.resolutions ? ` · ${dashEntry.resolutions}` : ""}`,
-            );
-        } else {
-          if (dashEntry)
-            pushWithFallback(
-              dashEntry.url,
-              `DASH${dashEntry.resolutions ? ` · ${dashEntry.resolutions}` : ""}`,
-            );
-          if (hlsUrl) pushWithFallback(hlsUrl, "HLS");
-          mp4s.forEach((s) => pushWithFallback(s.url, s.resolution));
+      if (desktop && directBase) {
+        // HLS first: hls.js gives adaptive quality and the loopback server
+        // rewrites the manifest so segments stay on this machine.
+        if (hlsUrl) pushDirect(hlsUrl, "HLS");
+        mp4s.forEach((s) => pushDirect(s.url, s.resolution));
+        // DASH can only go through the backend proxy (its MPD references are
+        // not rewritten by the loopback server).
+        if (dashEntry) pushServer(dashEntry.url, `${dashLabel} (proxy)`);
+        if (hlsUrl) pushServer(hlsUrl, "HLS (proxy)");
+        mp4s.forEach((s) => pushServer(s.url, `${s.resolution} (proxy)`));
+      } else if (supportsNativeHls) {
+        if (hlsUrl) pushServer(hlsUrl, "HLS");
+        mp4s.forEach((s) => pushServer(s.url, s.resolution));
+        if (dashEntry) pushServer(dashEntry.url, dashLabel);
+      } else {
+        if (dashEntry) pushServer(dashEntry.url, dashLabel);
+        if (hlsUrl) pushServer(hlsUrl, "HLS");
+        mp4s.forEach((s) => pushServer(s.url, s.resolution));
+      }
+
+      // The moviebox API serves SRT subtitles; convert each to a WebVTT
+      // blob URL so the browser's native <track> can actually play it.
+      // Captions live on cacdn.hakunaymatata.com (CloudFront) which does
+      // NOT enforce Referer (unlike the mp4 CDN), so a direct fetch from
+      // localhost works. Keep it direct to avoid proxying small text.
+      const tracks: Array<{ lang: string; label: string; src: string }> = [];
+      for (const t of mapCaptions(caps.captions)) {
+        try {
+          const vtt = await srtUrlToVttBlob(t.src);
+          blobUrls.push(vtt);
+          tracks.push({ lang: t.lang, label: t.label, src: vtt });
+        } catch {
+          /* skip caption that failed to load */
         }
-
-        // The moviebox API serves SRT subtitles; convert each to a WebVTT
-        // blob URL so the browser's native <track> can actually play it.
-        // Captions live on cacdn.hakunaymatata.com (CloudFront) which does
-        // NOT enforce Referer (unlike the mp4 CDN), so a direct fetch from
-        // localhost works. Keep it direct to avoid proxying small text.
-        const tracks: Array<{ lang: string; label: string; src: string }> = [];
-        for (const t of mapCaptions(caps.captions)) {
-          try {
-            const vtt = await srtUrlToVttBlob(t.src);
-            blobUrls.push(vtt);
-            tracks.push({ lang: t.lang, label: t.label, src: vtt });
-          } catch {
-            /* skip caption that failed to load */
-          }
-        }
-        if (!alive) return;
-        setStreamSnap({ key: playerKey, srcs, labels, captions: tracks });
-      })
-      .catch(() => {});
+      }
+      if (!alive) return;
+      setStreamSnap({ key: playerKey, srcs, labels, captions: tracks });
+    })().catch(() => {
+      if (alive) {
+        // Never leave the player on an endless spinner: surface a retryable
+        // error state instead (the backend may be temporarily unreachable).
+        setStreamSnap({
+          key: playerKey,
+          srcs: [],
+          labels: [],
+          captions: [],
+          error: true,
+        });
+      }
+    });
     return () => {
       alive = false;
       blobUrls.forEach((u) => URL.revokeObjectURL(u));
     };
-  }, [item.subjectId, item.id, se, ep, playerKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.subjectId, item.id, se, ep, playerKey, streamAttempt]);
 
   // Derived stream state.
   const loadingStream = streamSnap?.key !== playerKey;
   const streamError =
     !item.subjectId ||
-    (streamSnap?.key === playerKey && streamSnap.srcs.length === 0);
+    (streamSnap?.key === playerKey &&
+      (Boolean(streamSnap.error) || streamSnap.srcs.length === 0));
   const streamSrcs = streamSnap?.key === playerKey ? streamSnap.srcs : [];
   const streamLabels = streamSnap?.key === playerKey ? streamSnap.labels : [];
   const captions = streamSnap?.key === playerKey ? streamSnap.captions : [];
@@ -372,7 +413,9 @@ function WatchContent({ item }: { item: MediaItem }) {
   };
 
   const handleDownload = async () => {
-    const src = streamSrcs[0];
+    // Download the raw CDN file, not the loopback/proxy wrapper — main can
+    // stream it with the correct Referer from this machine.
+    const src = unwrapSource(streamSrcs[0] ?? "");
     if (!src) return;
     const safe = item.title.replace(/[^\w\- ]/g, "").slice(0, 60) || "video";
     const tag = isShow ? `S${pick.season}E${pick.episode}` : "";
@@ -511,22 +554,36 @@ function WatchContent({ item }: { item: MediaItem }) {
   ) : streamError || streamSrcs.length === 0 ? (
     <div className="flex aspect-video w-full flex-col items-center justify-center gap-4 bg-black px-6 text-center">
       <p className="max-w-sm text-lg text-soft">
-        Stream unavailable for this title right now.
+        {streamSnap?.error
+          ? "Could not reach the stream server."
+          : "Stream unavailable for this title right now."}
       </p>
       <p className="max-w-md text-sm text-soft/70">
-        The source is temporarily down, overloaded, or rate-limited on our end.
-        You can try again shortly, or watch it on a mirror site that serves the
-        same media with fewer ads.
+        {streamSnap?.error
+          ? "The catalog server did not respond. Check your connection and retry."
+          : "The source is temporarily down, overloaded, or rate-limited on our end. You can try again shortly, or watch it on a mirror site that serves the same media with fewer ads."}
       </p>
-      <a
-        href="https://movibox.net"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 font-bold text-white transition hover:bg-primary/80"
-      >
-        <FaArrowUpRightFromSquare className="h-4 w-4" />
-        Watch on Movibox
-      </a>
+      <div className="flex flex-wrap items-center justify-center gap-3">
+        <button
+          onClick={() => {
+            setStreamSnap(null);
+            setStreamAttempt((n) => n + 1);
+          }}
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 font-bold text-white transition hover:bg-primary/80"
+        >
+          <FaRepeat className="h-4 w-4" />
+          Try again
+        </button>
+        <a
+          href="https://movibox.net"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 rounded-lg border border-line bg-card px-5 py-2.5 font-bold text-white transition hover:bg-white/10"
+        >
+          <FaArrowUpRightFromSquare className="h-4 w-4" />
+          Watch on Movibox
+        </a>
+      </div>
     </div>
   ) : (
     viewToggle
@@ -710,7 +767,7 @@ function WatchContent({ item }: { item: MediaItem }) {
           subjectId: item.subjectId,
           se,
           ep,
-          streamUrl: streamSrcs[0],
+          streamUrl: unwrapSource(streamSrcs[0] ?? ""),
           error: reportError,
           mediaError: reportError.includes("code") ? reportError : undefined,
         }}
