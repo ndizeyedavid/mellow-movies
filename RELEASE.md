@@ -6,6 +6,16 @@
 
 ---
 
+## [1.1.7] - 2026-10-22
+
+### Patch - Fix auto-update download 404
+
+Auto-update failed after 1.1.6 because the installer filename in the update manifest did not match the asset on GitHub:
+
+- **Explicit artifact names:** Windows builds now ship as `Mellow.Movies.Setup.<version>.exe` and `Mellow.Movies.Portable.<version>.exe`, with no spaces, so `latest.yml` and the GitHub release asset always match.
+- **Why it broke:** electron-builder wrote the safe name `Mellow-Movies-Setup-1.1.6.exe` into `latest.yml`, while GitHub rewrote the uploaded file's spaces to dots (`Mellow.Movies.Setup.1.1.6.exe`), so the updater requested a file that did not exist.
+- **Version note:** 1.1.6.1 is not a valid semver version for electron-updater, so this fix ships as 1.1.7 and updates resume normally.
+
 ## [1.1.6] - 2026-10-22
 
 ### Patch - Play without the residential proxy
