@@ -137,8 +137,12 @@ export default function DownloadPage() {
     };
   }, []);
 
-  // Find Windows assets: Setup (nsis) and portable
+  // Find assets per platform from the latest release.
   const winSetup = release?.assets.find((a) => /Setup.*\.exe$/i.test(a.name));
+  const macDmg = release?.assets.find((a) => /\.dmg$/i.test(a.name));
+  const macZip = release?.assets.find((a) => /\.zip$/i.test(a.name));
+  const linuxAppImage = release?.assets.find((a) => /\.AppImage$/i.test(a.name));
+  const linuxDeb = release?.assets.find((a) => /\.deb$/i.test(a.name));
   const tag = release?.tag_name || FALLBACK_TAG;
   const version = tag.replace(/^v/, "");
 
@@ -156,8 +160,8 @@ export default function DownloadPage() {
                 Download Mellow Movies
               </h1>
               <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted sm:text-base">
-                Get the best experience on your device. Windows is ready now.
-                Linux, macOS, Android and iOS are coming soon.
+                Get the best experience on your device. Windows, macOS and Linux
+                are ready now. Android and iOS are coming soon.
               </p>
               <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
                 {loading ? (
@@ -221,13 +225,37 @@ export default function DownloadPage() {
             title="Linux"
             subtitle="Ubuntu / Fedora · AppImage / deb"
             icon={<FaLinux />}
-            available={false}
+            available={true}
+            downloadUrl={
+              linuxAppImage?.browser_download_url ||
+              linuxDeb?.browser_download_url ||
+              `https://github.com/${REPO}/releases/latest/download/Mellow.Movies.${version}.AppImage`
+            }
+            fileName={
+              linuxAppImage?.name ||
+              linuxDeb?.name ||
+              `Mellow Movies ${version}.AppImage`
+            }
+            size={linuxAppImage?.size || linuxDeb?.size}
+            version={`v${version}`}
+            badge="Available"
           />
           <PlatformCard
             title="macOS"
-            subtitle="macOS 13+ · Universal (Intel + Apple Silicon)"
+            subtitle="macOS 13+ · Intel + Apple Silicon (dmg / zip)"
             icon={<FaApple />}
-            available={false}
+            available={true}
+            downloadUrl={
+              macDmg?.browser_download_url ||
+              macZip?.browser_download_url ||
+              `https://github.com/${REPO}/releases/latest/download/Mellow.Movies.${version}.dmg`
+            }
+            fileName={
+              macDmg?.name || macZip?.name || `Mellow Movies ${version}.dmg`
+            }
+            size={macDmg?.size || macZip?.size}
+            version={`v${version}`}
+            badge="Available"
           />
         </div>
 

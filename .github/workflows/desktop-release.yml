@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Override version (e.g. 1.0.1) — leave empty to read from RELEASE.md"
+        description: "Override version (e.g. 1.0.1) - leave empty to read from RELEASE.md"
         required: false
         type: string
 
@@ -22,22 +22,16 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
-    runs-on: windows-latest
-    timeout-minutes: 40
+  parse-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      skip: ${{ steps.check.outputs.skip }}
     steps:
       - name: Checkout (full history for tags)
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Setup Node (LTS, for Electron 32)
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: |
-            desktop/package-lock.json
 
       - name: Parse version from RELEASE.md
         id: version
@@ -49,18 +43,13 @@ jobs:
           } else {
             $releaseFile = if (Test-Path "RELEASE.md") { "RELEASE.md" } elseif (Test-Path "desktop/RELEASE.md") { "desktop/RELEASE.md" } else { throw "No RELEASE.md found" }
             $text = Get-Content $releaseFile -Raw
-            # First ## [1.0.0] or ## 1.0.0 or # v1.0.0
             $m = [regex]::Match($text, '(?m)^#{1,2}\s*\[?v?(\d+\.\d+\.\d+)\]?')
-            if (-not $m.Success) { throw "Could not parse version from $releaseFile — add a header like '## [1.0.1] - YYYY-MM-DD'" }
+            if (-not $m.Success) { throw "Could not parse version from $releaseFile" }
             $version = $m.Groups[1].Value
           }
           if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Invalid semver: $version" }
-          # semver sanity: must be newer than latest tag if any
-          $latest = ""
-          try { $latest = (git tag --sort=-v:refname | Select-Object -First 1).TrimStart("v") } catch {}
           "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          "latest=$latest" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          Write-Host "Version from RELEASE.md: $version (latest tag: $latest)"
+          Write-Host "Version from RELEASE.md: $version"
 
       - name: Check if tag already exists
         id: check
@@ -69,26 +58,32 @@ jobs:
           $tag = "v${{ steps.version.outputs.version }}"
           $exists = $false
           try { git rev-parse -q --verify "refs/tags/$tag" | Out-Null; if ($LASTEXITCODE -eq 0) { $exists = $true } } catch {}
-          # also check remote
-          if (-not $exists) { try { git ls-remote --tags origin "refs/tags/$tag" | Out-Null; if ($LASTEXITCODE -eq 0 -and (git ls-remote --tags origin "refs/tags/$tag")) { $exists = $true } } catch {} }
+          if (-not $exists) { try { if (git ls-remote --tags origin "refs/tags/$tag") { $exists = $true } } catch {} }
           if ($exists) {
-            Write-Host "Tag $tag already exists — skipping build/release (idempotent)."
+            Write-Host "Tag $tag already exists - skipping."
             "skip=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           } else {
-            Write-Host "Tag $tag is new — proceeding to build."
+            Write-Host "Tag $tag is new - proceeding."
             "skip=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           }
 
+  sync-version:
+    needs: parse-version
+    if: needs.parse-version.outputs.skip == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Sync version into desktop/package.json
-        if: steps.check.outputs.skip == 'false'
         shell: pwsh
         run: |
-          $version = "${{ steps.version.outputs.version }}"
+          $version = "${{ needs.parse-version.outputs.version }}"
           $pkgPath = "desktop/package.json"
           $pkg = Get-Content $pkgPath -Raw | ConvertFrom-Json
-          $old = $pkg.version
-          if ($old -ne $version) {
-            Write-Host "Bumping desktop/package.json $old -> $version"
+          if ($pkg.version -ne $version) {
             $pkg.version = $version
             ($pkg | ConvertTo-Json -Depth 10) | Set-Content $pkgPath -Encoding utf8
             git config user.name "github-actions[bot]"
@@ -98,55 +93,107 @@ jobs:
             git push origin HEAD:main
           } else { Write-Host "package.json already at $version" }
 
+  build:
+    needs: [parse-version, sync-version]
+    if: needs.parse-version.outputs.skip == 'false'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+          - os: macos-latest
+            platform: mac
+          - os: ubuntu-latest
+            platform: linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install desktop deps
+        working-directory: desktop
+        run: npm ci
+
+      - name: Build desktop
+        working-directory: desktop
+        run: npm run build
+
+      - name: Package (${{ matrix.platform }})
+        working-directory: desktop
+        run: npx electron-builder --${{ matrix.platform }} --config --publish never
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.platform }}
+          path: |
+            desktop/dist/*.exe
+            desktop/dist/*.dmg
+            desktop/dist/*.zip
+            desktop/dist/*.AppImage
+            desktop/dist/*.deb
+            desktop/dist/*.yml
+            desktop/dist/*.blockmap
+          if-no-files-found: ignore
+
+  release:
+    needs: [parse-version, build]
+    if: needs.parse-version.outputs.skip == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: desktop/dist
+          merge-multiple: true
+
       - name: Extract release notes
-        if: steps.check.outputs.skip == 'false'
         id: notes
         shell: pwsh
         run: |
           $releaseFile = if (Test-Path "RELEASE.md") { "RELEASE.md" } else { "desktop/RELEASE.md" }
-          $version = "${{ steps.version.outputs.version }}"
+          $version = "${{ needs.parse-version.outputs.version }}"
           $text = Get-Content $releaseFile -Raw
-          # Capture section under the version header until next ## [
-          $pattern = "(?ms)^#{1,2}\s*\[?v?$([regex]::Escape($version))\]?[^\n]*\n(.*?)(?=^#{1,2}\s*\[?v?\d+\.\d+\.\d+\]?|\z)"
-          # Fix escaped pattern — re-evaluate
           $pattern = "(?ms)^#{1,2}\s*\[?v?" + [regex]::Escape($version) + "\]?[^\n]*\n(.*?)(?=^#{1,2}\s*\[?v?\d+\.\d+\.\d+\]?|\z)"
           $section = ""
           if ($text -match $pattern) { $section = $matches[1].Trim() } else { $section = $text.Trim().Substring(0, [Math]::Min(8000, $text.Length)) }
-          if (-not $section) { $section = "Release $version — see RELEASE.md for details." }
+          if (-not $section) { $section = "Release $version - see RELEASE.md for details." }
           Set-Content -Path release-notes.md -Value $section -Encoding utf8
-          Write-Host "Release notes:`n$section"
-
-      - name: Install desktop deps
-        if: steps.check.outputs.skip == 'false'
-        working-directory: desktop
-        run: npm ci
-
-      - name: Build desktop (vite + electron-builder, no publish)
-        if: steps.check.outputs.skip == 'false'
-        working-directory: desktop
-        run: |
-          npm run build
-          npx electron-builder --win --config --publish never
 
       - name: Create tag + GitHub Release
-        if: steps.check.outputs.skip == 'false'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "v${{ steps.version.outputs.version }}"
-          $version = "${{ steps.version.outputs.version }}"
+          $tag = "v${{ needs.parse-version.outputs.version }}"
+          $version = "${{ needs.parse-version.outputs.version }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          # Ensure we are on latest main after the version bump commit
           git pull --rebase origin main
           git tag $tag
           git push origin $tag
           $artifacts = @()
           $artifacts += Get-ChildItem "desktop/dist/*.exe" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
+          $artifacts += Get-ChildItem "desktop/dist/*.dmg" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
+          $artifacts += Get-ChildItem "desktop/dist/*.zip" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
+          $artifacts += Get-ChildItem "desktop/dist/*.AppImage" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
+          $artifacts += Get-ChildItem "desktop/dist/*.deb" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
           $artifacts += Get-ChildItem "desktop/dist/*.yml" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
           $artifacts += Get-ChildItem "desktop/dist/*.blockmap" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
-          if ($artifacts.Count -eq 0) { throw "No artifacts found in desktop/dist/" }
+          if ($artifacts.Count -eq 0) { throw "No artifacts found" }
           Write-Host "Artifacts: $($artifacts -join ', ')"
           gh release create $tag `
             --title "Mellow Movies $tag" `
@@ -157,5 +204,4 @@ jobs:
           Write-Host "Release $tag created."
 
       - name: Summary
-        if: steps.check.outputs.skip == 'false'
-        run: echo "Published v${{ steps.version.outputs.version }} with installers."
+        run: echo "Published v${{ needs.parse-version.outputs.version }} with cross-platform installers."
