@@ -6,6 +6,16 @@
 
 ---
 
+## [1.1.10] - 2026-10-22
+
+### Patch - Use only the desktop's own proxy
+
+The desktop app no longer falls back to the backend proxy pool for playback:
+
+- **Direct only:** on desktop, candidates are now HLS-direct + MP4-direct through the loopback server. No `(... (proxy))` entries in the quality menu.
+- **No backend proxy dependency:** the backend proxy pool (which depends on the home relay) is no longer in the playback path, so playback works when the home relay is offline.
+- **Safety net:** DASH-only titles and the case where the loopback server failed to start still use the backend proxy as a last resort.
+
 ## [1.1.9] - 2026-10-22
 
 ### Patch - Fix stalled playback after a few minutes

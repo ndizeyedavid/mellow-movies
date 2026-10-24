@@ -283,15 +283,25 @@ function WatchContent({ item }: { item: MediaItem }) {
       };
 
       if (desktop && directBase) {
+        // Desktop relies solely on its own loopback proxy (client-direct
+        // residential fetch). The backend proxy pool is not used: when the home
+        // relay is offline it falls back to datacenter egress which the CDN
+        // blocks, so depending on it only caused stalls.
         // HLS first: hls.js gives adaptive quality and the loopback server
         // rewrites the manifest so segments stay on this machine.
         if (hlsUrl) pushDirect(hlsUrl, "HLS");
         mp4s.forEach((s) => pushDirect(s.url, s.resolution));
-        // DASH can only go through the backend proxy (its MPD references are
-        // not rewritten by the loopback server).
-        if (dashEntry) pushServer(dashEntry.url, `${dashLabel} (proxy)`);
-        if (hlsUrl) pushServer(hlsUrl, "HLS (proxy)");
-        mp4s.forEach((s) => pushServer(s.url, `${s.resolution} (proxy)`));
+        // DASH is not streamed client-direct (its MPD is not rewritten). Only
+        // fall back to the backend proxy for DASH when there is no direct
+        // candidate at all, so DASH-only titles still play.
+        if (srcs.length === 0 && dashEntry) pushServer(dashEntry.url, dashLabel);
+      } else if (desktop) {
+        // Loopback server failed to start: fall back to the backend proxy so
+        // the app is not completely unusable, even though that path may be
+        // unavailable when the home relay is offline.
+        if (dashEntry) pushServer(dashEntry.url, dashLabel);
+        if (hlsUrl) pushServer(hlsUrl, "HLS");
+        mp4s.forEach((s) => pushServer(s.url, s.resolution));
       } else if (supportsNativeHls) {
         if (hlsUrl) pushServer(hlsUrl, "HLS");
         mp4s.forEach((s) => pushServer(s.url, s.resolution));
