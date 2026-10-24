@@ -6,6 +6,12 @@
 
 ---
 
+## [1.2.1] - 2026-10-22
+
+Added `mac` and `linux` build targets with space-free `artifactName (Mellow.Movies-${version}.${ext})` so `latest.yml/asset` names stay consistent (avoiding the 404 bug we just fixed).
+
+### Feature - Cross platform update
+
 ## [1.2.0] - 2026-10-22
 
 ### Feature - Mini player, caching, and CDN mirrors
