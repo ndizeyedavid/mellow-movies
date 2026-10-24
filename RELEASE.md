@@ -6,6 +6,14 @@
 
 ---
 
+## [1.1.8] - 2026-10-22
+
+### Patch - Render changelog as markdown
+
+The What's new modal now renders release notes as formatted markdown (headings, bullets, bold, code, links) instead of showing raw `##` / `**` text.
+
+Also keeps the 1.1.7 auto-update filename fix (space-free artifact names).
+
 ## [1.1.7] - 2026-10-22
 
 ### Patch - Fix auto-update download 404

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { FaCircleCheck, FaRocket, FaXmark, FaGithub } from "react-icons/fa6";
+import Markdown from "../ui/Markdown";
 
 interface ChangelogModalProps {
   open: boolean;
@@ -115,9 +116,7 @@ export default function ChangelogModal({
             </div>
           ) : notes ? (
             <div className="rounded-xl border border-line bg-background p-4">
-              <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-soft">
-                {notes}
-              </pre>
+              <Markdown text={notes} />
             </div>
           ) : (
             <div className="rounded-xl border border-dashed border-line bg-background p-4 text-center">
