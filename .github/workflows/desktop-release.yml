@@ -102,7 +102,7 @@ jobs:
         include:
           - os: windows-latest
             platform: win
-          - os: macos-latest
+          - os: macos-13
             platform: mac
           - os: ubuntu-latest
             platform: linux
