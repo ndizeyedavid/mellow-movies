@@ -6,6 +6,17 @@
 
 ---
 
+## [1.1.9] - 2026-10-22
+
+### Patch - Fix stalled playback after a few minutes
+
+Playback could hang on the buffering screen after several videos because the loopback media server leaked connections:
+
+- **Drain deadlock fixed:** when the client disconnected mid-stream, the pump waited forever for a drain event that would never fire. It now races drain against client close and a timeout.
+- **Upstream timeouts:** each request aborts if the CDN produces no data for 30s, or after 120s total, so a stalled stream fails fast instead of hanging forever.
+- **Client disconnect handling:** cancelling the reader and destroying the response on disconnect, plus keep-alive/header timeouts on the server, preventing socket accumulation.
+- **Accept-Encoding: identity** sent to the CDN (matches the backend media proxy).
+
 ## [1.1.8] - 2026-10-22
 
 ### Patch - Render changelog as markdown
