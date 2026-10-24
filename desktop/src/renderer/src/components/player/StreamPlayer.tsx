@@ -30,7 +30,10 @@ import { API_BASE_URL } from "../../api/client";
 // Retry delays (ms) before retrying the same source. Transient CDN limits
 // (429/5xx) usually clear within a couple of seconds, so a bounded retry
 // beats jumping straight to the next candidate (which is just as limited).
-const RETRY_DELAYS = [1200, 3000];
+// A single, longer retry — hammering the same URL again within seconds just
+// re-triggers the CDN's rate limit. One retry after 3s is enough for a
+// transient 429 to clear; after that we move on.
+const RETRY_DELAYS = [3000];
 // Once a stream is actually playing, if the playhead doesn't advance for this
 // long (ms) and the video isn't paused/ended, the stream has stalled — e.g.
 // every segment request is getting rate-limited. Fall through to the next
@@ -65,6 +68,9 @@ interface StreamPlayerProps {
   onEnded?: () => void;
   /** Report playback issue anonymously (creates GitHub issue + ntfy). */
   onReport?: (message: string) => void;
+  /** Called when every candidate has failed, so the parent can re-resolve
+   *  fresh stream URLs (e.g. expired signed URLs) and retry. */
+  onHardFailure?: () => void;
 }
 
 /**
@@ -86,6 +92,7 @@ export default function StreamPlayer({
   onProgress,
   onEnded,
   onReport,
+  onHardFailure,
 }: StreamPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -100,6 +107,9 @@ export default function StreamPlayer({
   // dead URL (backend proxy offline, CDN 403) advances to the next candidate
   // instead of looping on the same manifest forever.
   const hlsNetRetryRef = useRef(0);
+  // Guard so onHardFailure is invoked only once per candidate set.
+  const hardFailureCalledRef = useRef(false);
+  const lastHardFailureRef = useRef(0);
   // Last time the playhead advanced — the stall watchdog uses this to tell a
   // stream that's truly dead mid-playback from a brief recoverable blip.
   const lastProgressRef = useRef(0);
@@ -111,6 +121,9 @@ export default function StreamPlayer({
   // Resume target captured once per mount — the bootstrap effect re-runs on
   // source switches but must not seek again after the first metadata.
   const startAtRef = useRef(startAt);
+  // Captured when the user changes quality mid-playback, so the new source
+  // seeks to the same position instead of restarting from 0.
+  const pendingSeekRef = useRef<number | null>(null);
 
   // YouTube-style double-tap seek (touch only): remembers the last tap so a
   // quick second tap can cancel the pending pause and seek ±10s instead.
@@ -245,15 +258,29 @@ export default function StreamPlayer({
    *  list is exhausted. Used when a source exhausts its retries or stalls. */
   const tryNextSource = useCallback(() => {
     retryCountRef.current = 0;
+    pendingSeekRef.current = null;
     setUseHlsFallback(false);
     lastProgressRef.current = Date.now();
     if (srcIndex + 1 >= srcs.length) {
       setError(true);
       setWaiting(false);
+      if (!hardFailureCalledRef.current && onHardFailure) {
+        const now = Date.now();
+        // Only re-resolve once per 60s — rapid re-fetches just re-trigger
+        // the CDN rate limit and make things worse.
+        if (now - lastHardFailureRef.current > 60000) {
+          lastHardFailureRef.current = now;
+          hardFailureCalledRef.current = true;
+          // Delay the re-resolve so the CDN has time to cool down.
+          setTimeout(() => onHardFailure(), 15000);
+        }
+      }
     } else {
-      setSrcIndex((i) => i + 1);
+      // Pause before fetching the next candidate to avoid hammering the CDN.
+      setWaiting(true);
+      setTimeout(() => setSrcIndex((i) => i + 1), 2000);
     }
-  }, [srcIndex, srcs.length]);
+  }, [srcIndex, srcs.length, onHardFailure]);
 
   /* ---------- Hosted blob fallback (Vercel → bcdn* 429/426) ---------- */
   // On hosted, direct <video src="https://bcdnxw..."> sends
@@ -355,6 +382,10 @@ export default function StreamPlayer({
         setBlobProgress(null);
         setError(true);
         setWaiting(false);
+        if (!hardFailureCalledRef.current && onHardFailure) {
+          hardFailureCalledRef.current = true;
+          onHardFailure();
+        }
       }
     };
     fetchBlob();
@@ -386,16 +417,20 @@ export default function StreamPlayer({
     setMediaError(null);
     startedRef.current = false;
     hlsNetRetryRef.current = 0;
+    hardFailureCalledRef.current = false;
 
     const onMetadata = () => {
       setDuration(video.duration || 0);
       setWaiting(false);
-      // Resume: seek once, on the first metadata event of this mount.
-      const resume = startAtRef.current;
-      if (resume && resume > 5 && video.duration > 0) {
+      // Resume: seek once, on the first metadata event of this mount. Also
+      // honours a pending seek captured when the user changed quality, so
+      // switching resolution continues from the current position.
+      const resume = startAtRef.current ?? pendingSeekRef.current;
+      if (resume && resume > 0.5 && video.duration > 0) {
         video.currentTime = Math.min(resume, video.duration - 1);
       }
       startAtRef.current = undefined;
+      pendingSeekRef.current = null;
       // Kick playback now that real data is attached (metadata loaded). This
       // must wait for metadata — calling play() earlier (right after the
       // engine init, e.g. dash.js's initialize) races the MediaSource setup
@@ -816,9 +851,17 @@ export default function StreamPlayer({
       hlsRef.current.currentLevel = level;
       return;
     }
-    // Direct file: switch to the picked quality in the candidate list.
+    // Direct file: switch to the picked quality in the candidate list, keeping
+    // the current playback position instead of restarting from 0.
     const entry = fileEntries[level];
-    if (entry) setSrcIndex(srcs.indexOf(entry.url));
+    if (entry) {
+      const v = videoRef.current;
+      if (v && Number.isFinite(v.currentTime) && v.currentTime > 0) {
+        pendingSeekRef.current = v.currentTime;
+      }
+      userWantsPlayRef.current = true;
+      setSrcIndex(srcs.indexOf(entry.url));
+    }
   };
 
   const onAudioTrackChange = (id: number) => {

@@ -6,6 +6,22 @@
 
 ---
 
+## [1.2.0] - 2026-10-22
+
+### Feature - Mini player, caching, and CDN mirrors
+
+Major reliability and UX update:
+
+- **YouTube-style mini player:** navigating away from a movie keeps it playing in a floating bottom-right player with play/pause, expand-to-fullscreen (resumes at the saved position), and close. Position is tracked and restored.
+- **Resolution change keeps position:** switching quality mid-playback now seeks to the current time instead of restarting from 0.
+- **Disk cache (LRU, 2 GB):** media bytes are cached on disk keyed by resource path, so re-watches and the mini-to-full expand are near-instant (range requests served from disk).
+- **CDN mirror support (backend):** stream resolution now also queries the native mobile endpoint, adding macdn.aoneroom.com as an alternate CDN host with a separate rate-limit bucket. Sources are interleaved by quality (primary then mirror).
+- **curl_cffi TLS fingerprinting:** backend upstream requests use curl_cffi (chrome120 impersonation) to bypass WAF blocks.
+- **Robustness:** inactivity (15s) + hard (60s) + throughput (10s/200KB) timeouts, drain-deadlock fix, crash fix (ERR_STREAM_DESTROYED/ERR_INVALID_STATE), auto re-resolve on hard failure, pacing delays to avoid CDN throttling.
+- **Direct-only playback:** desktop no longer uses the backend proxy pool (which depended on the home relay). Relies solely on its own loopback proxy.
+- **Changelog renders as markdown** in the What's new modal.
+- **Updater filename fix:** space-free artifact names so latest.yml matches the GitHub asset (1.1.7).
+
 ## [1.1.10] - 2026-10-22
 
 ### Patch - Use only the desktop's own proxy

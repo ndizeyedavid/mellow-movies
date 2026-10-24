@@ -30,6 +30,7 @@ import {
 import { showToast } from "../utils/toast";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useOgMeta } from "../hooks/useOgMeta";
+import { useMiniPlayer, type MiniSession } from "../context/MiniPlayerContext";
 import {
   clearProgress,
   getLastWatchedEpisode,
@@ -188,7 +189,18 @@ function WatchContent({ item }: { item: MediaItem }) {
     kind: item.type,
   });
   const navigate = useNavigate();
+  const mini = useMiniPlayer();
   const [searchParams] = useSearchParams();
+
+  // If the user left this title playing in the mini player, resume from there.
+  // Captured once on mount (before mini is cleared) so re-renders don't lose it.
+  const [resumeSession] = useState<MiniSession | null>(() =>
+    mini.session?.item.id === item.id ? mini.session : null,
+  );
+  const resumeFromMini = resumeSession?.position ?? null;
+
+  // (Mini player is cleared inside the stream-resolve effect below, so we can
+  // reuse its sources before tearing it down.)
   // Player layout: "wide" spans the full viewport (default); "boxed" keeps
   // the player inside the container next to the details/episode panel.
   const [view, setView] = useState<"wide" | "boxed">("wide");
@@ -202,6 +214,9 @@ function WatchContent({ item }: { item: MediaItem }) {
   } | null>(null);
   // Bumped by the "Try again" button after a failed /api/stream resolve.
   const [streamAttempt, setStreamAttempt] = useState(0);
+  // Guard so a hard failure re-resolves at most twice per session.
+  const reResolveCountRef = useRef(0);
+  const resumeUsedRef = useRef(false);
   const [recommendations, setRecommendations] = useState<MediaItem[]>([]);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportError, setReportError] = useState("");
@@ -217,11 +232,29 @@ function WatchContent({ item }: { item: MediaItem }) {
   const shareAt = Number.isFinite(tParam) && tParam > 0 ? tParam : null;
   // Resume position for the current episode (read once per episode mount).
   const savedAt = getProgress(playerKey)?.position;
-  const resumeAt = shareAt ?? savedAt;
+  const resumeAt = shareAt ?? resumeFromMini ?? savedAt;
 
   // Resolve the playable source for the selected episode.
   useEffect(() => {
     if (!item.subjectId) return;
+    // A successful resolve resets the re-resolve budget.
+    reResolveCountRef.current = 0;
+    resumeUsedRef.current = false;
+
+    // If we're expanding from the mini player, reuse its sources/position
+    // instead of re-fetching (and re-buffering) the stream.
+    if (resumeSession && !resumeUsedRef.current) {
+      resumeUsedRef.current = true;
+      mini.clear();
+      setStreamSnap({
+        key: playerKey,
+        srcs: resumeSession.srcs,
+        labels: resumeSession.labels,
+        captions: resumeSession.captions,
+      });
+      return;
+    }
+
     let alive = true;
     const blobUrls: string[] = [];
     (async () => {
@@ -359,6 +392,48 @@ function WatchContent({ item }: { item: MediaItem }) {
   const streamLabels = streamSnap?.key === playerKey ? streamSnap.labels : [];
   const captions = streamSnap?.key === playerKey ? streamSnap.captions : [];
 
+  // Keep fresh values in refs so the unmount cleanup can hand off to the
+  // mini player with the latest position/sources.
+  const srcsRef = useRef(streamSrcs);
+  const labelsRef = useRef(streamLabels);
+  const captionsRef = useRef(captions);
+  const pickRef = useRef(pick);
+  const posRef = useRef(0);
+  useEffect(() => { srcsRef.current = streamSrcs; }, [streamSrcs]);
+  useEffect(() => { labelsRef.current = streamLabels; }, [streamLabels]);
+  useEffect(() => { captionsRef.current = captions; }, [captions]);
+  useEffect(() => { pickRef.current = pick; }, [pick]);
+
+  // When leaving the watch page mid-playback, hand off to the mini player.
+  useEffect(() => {
+    return () => {
+      // Prefer the tracked position; fall back to the (still-mounted) video
+      // element's currentTime in case progress events stopped early.
+      let pos = posRef.current;
+      if (pos < 2) {
+        const v = document.querySelector("video");
+        if (v && Number.isFinite(v.currentTime) && v.currentTime > 2) pos = v.currentTime;
+      }
+      const srcs = srcsRef.current;
+      if (pos > 2 && srcs.length > 0) {
+        mini.setSession({
+          item: {
+            id: item.id,
+            title: item.title,
+            poster: item.poster,
+            type: item.type,
+          },
+          pick: pickRef.current,
+          srcs,
+          labels: labelsRef.current,
+          captions: captionsRef.current,
+          position: pos,
+        });
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Same-type catalog for "More Like This".
   useEffect(() => {
     let alive = true;
@@ -387,9 +462,11 @@ function WatchContent({ item }: { item: MediaItem }) {
   );
   const lastSaveAtRef = useRef(0);
   const [currentPos, setCurrentPos] = useState(0);
+  useEffect(() => { posRef.current = currentPos; }, [currentPos]);
 
   const handleProgress = (position: number, duration: number) => {
     lastProgressRef.current = { position, duration };
+    posRef.current = position;
     setCurrentPos(position);
     const now = Date.now();
     // Throttle localStorage writes to ~every 5s of playback.
@@ -554,6 +631,12 @@ function WatchContent({ item }: { item: MediaItem }) {
         setReportError(msg);
         setReportOpen(true);
       }}
+      onHardFailure={() => {
+        if (reResolveCountRef.current >= 2) return;
+        reResolveCountRef.current += 1;
+        setStreamSnap(null);
+        setStreamAttempt((n) => n + 1);
+      }}
     />
   );
 
@@ -571,7 +654,7 @@ function WatchContent({ item }: { item: MediaItem }) {
       <p className="max-w-md text-sm text-soft/70">
         {streamSnap?.error
           ? "The catalog server did not respond. Check your connection and retry."
-          : "The source is temporarily down, overloaded, or rate-limited on our end. You can try again shortly, or watch it on a mirror site that serves the same media with fewer ads."}
+          : "The CDN is throttling requests from your IP (returns 206 but sends no data). Wait ~60 seconds and click Try again, or run the home relay (scripts/start-home-proxy.ps1) for unlimited playback. Previously watched titles play instantly from cache."}
       </p>
       <div className="flex flex-wrap items-center justify-center gap-3">
         <button

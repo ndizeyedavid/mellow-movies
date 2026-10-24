@@ -3,6 +3,10 @@ import json
 import os
 import sys
 import time
+import base64
+import hashlib
+import hmac
+import secrets
 import httpx
 import asyncio
 import urllib.parse
@@ -38,6 +42,16 @@ except ImportError:
                         os.environ[_k] = _v
             except Exception:
                 pass
+
+
+def _new_session(timeout: int = 25):
+    """Return an async HTTP session. Prefers curl_cffi (real Chrome TLS
+    fingerprint) when available, falls back to httpx."""
+    try:
+        from curl_cffi.requests import AsyncSession
+        return AsyncSession(impersonate="chrome120", timeout=timeout)
+    except Exception:
+        return httpx.AsyncClient(follow_redirects=True, timeout=timeout)
 
 
 def _residential_proxy_url() -> str | None:
@@ -533,7 +547,7 @@ async def _get_bearer_token() -> str:
     global _bearer_token
     if _bearer_token:
         return _bearer_token
-    async with httpx.AsyncClient(follow_redirects=True, timeout=25) as client:
+    async with _new_session(25) as client:
         resp = await client.get(f"{API_BASE}/home?host=moviebox.ph", headers=DEFAULT_HEADERS)
         x_user = resp.headers.get("x-user")
         if x_user:
@@ -556,7 +570,7 @@ async def _make_request(url: str, method: str = "GET", payload: dict = None, cus
         **_geo_headers(client_ip),
         **(custom_headers or {})
     }
-    async with httpx.AsyncClient(follow_redirects=True, timeout=25) as client:
+    async with _new_session(25) as client:
         try:
             if method == "POST":
                 resp = await client.post(url, headers=headers, json=payload)
@@ -1007,7 +1021,214 @@ async def get_movie_detail(request: Request, slug: str):
     url = f"{API_BASE}/detail?detailPath={slug}"
     return await _make_request(url, client_ip=_client_ip(request))
 
+# --- Native mobile endpoint (aoneroom) auth + stream extraction ---
+# Provides alternate CDN hosts (macdn.aoneroom.com / CloudFront) that are not
+# throttled the same way as bcdnxw.hakunaymatata.com, giving real CDN mirrors.
+SECRET_KEY_DEFAULT_B64 = "NzZpUmwwN3MweFNOOWpxbUVXQXQ3OUVCSlp1bElRSXNWNjRGWnIyTw=="
+SECRET_KEY_ALT_B64 = "WHFuMm5uTzQxL0w5Mm8xaXVYaFNMSFRiWHZZNFo1Wlo2Mm04bVNMQQ=="
+MODERN_USER_AGENT = "com.community.mbox.in/50020130 (Linux; U; Android 14; en_IN; Pixel 8; Build/UD1A.230803.041; Cronet/145.0.7582.0)"
+NATIVE_API_BASE = "https://api3.aoneroom.com"
+
+
+def _b64decode(s: str) -> bytes:
+    s = s.replace("-", "+").replace("_", "/")
+    s += "=" * (-len(s) % 4)
+    return base64.b64decode(s)
+
+
+def get_secret_bytes(use_alt_key: bool = False) -> bytes:
+    outer = SECRET_KEY_ALT_B64 if use_alt_key else SECRET_KEY_DEFAULT_B64
+    inner = _b64decode(outer).decode("utf-8")
+    return _b64decode(inner)
+
+
+def generate_device_id() -> str:
+    return secrets.token_hex(16)
+
+
+def md5_hex(data: bytes) -> str:
+    return hashlib.md5(data).hexdigest()
+
+
+def generate_x_client_token(timestamp: int) -> str:
+    ts_str = str(timestamp)
+    reversed_ts = ts_str[::-1].encode("utf-8")
+    return f"{ts_str},{md5_hex(reversed_ts)}"
+
+
+def generate_client_info(device_id: str) -> str:
+    return json.dumps(
+        {
+            "package_name": "com.community.mbox.in",
+            "version_name": "4.0.03.0920.03",
+            "version_code": 50020130,
+            "os": "android",
+            "os_version": "14",
+            "device_id": device_id,
+            "install_store": "official",
+            "gaid": "1b2212c1-dadf-43c3-a0c8-bd6ce48ae22d",
+            "brand": "Google",
+            "model": "Pixel 8",
+            "system_language": "en",
+            "net": "NETWORK_WIFI",
+            "region": "IN",
+            "timezone": "Asia/Calcutta",
+            "sp_code": "",
+        },
+        separators=(",", ":"),
+    )
+
+
+def build_canonical_string(method: str, accept: str | None, content_type: str | None, url: str, body: str | None, timestamp: int) -> str:
+    parsed = urllib.parse.urlsplit(url)
+    path = parsed.path or "/"
+    if parsed.query:
+        pairs = []
+        for segment in parsed.query.split("&"):
+            if not segment:
+                continue
+            pieces = segment.split("=", 1)
+            pairs.append((pieces[0], pieces[1] if len(pieces) > 1 else ""))
+        pairs.sort(key=lambda kv: kv[0])
+        canonical_query = "&".join(f"{k}={v}" for k, v in pairs)
+        canonical_url = f"{path}?{canonical_query}"
+    else:
+        canonical_url = path
+
+    body_bytes = body.encode("utf-8") if body is not None else None
+    if body_bytes:
+        body_length = str(len(body_bytes))
+        body_hash = md5_hex(body_bytes[:102400])
+    else:
+        body_length = ""
+        body_hash = ""
+
+    return "\n".join(
+        [
+            method.upper(),
+            accept or "",
+            content_type or "",
+            body_length,
+            str(timestamp),
+            body_hash,
+            canonical_url,
+        ]
+    )
+
+
+def generate_x_tr_signature(method: str, accept: str | None, content_type: str | None, url: str, body: str | None, timestamp: int, use_alt_key: bool = False) -> str:
+    canonical = build_canonical_string(method, accept, content_type, url, body, timestamp)
+    key = get_secret_bytes(use_alt_key)
+    digest = hmac.new(key, canonical.encode("utf-8"), hashlib.md5).digest()
+    sig_b64 = base64.b64encode(digest).decode("ascii")
+    return f"{timestamp}|2|{sig_b64}"
+
+
+def build_auth_headers(method: str, url: str, body: str | None = None, token: str | None = None, device_id: str | None = None, use_alt_key: bool = False, content_type: str = "application/json", accept: str = "application/json") -> dict:
+    ts = int(time.time() * 1000)
+    dev_id = device_id or generate_device_id()
+    headers = {
+        "user-agent": MODERN_USER_AGENT,
+        "accept": accept,
+        "content-type": content_type,
+        "connection": "keep-alive",
+        "x-client-token": generate_x_client_token(ts),
+        "x-tr-signature": generate_x_tr_signature(method, accept, content_type, url, body, ts, use_alt_key),
+        "x-client-info": generate_client_info(dev_id),
+        "x-client-status": "0",
+    }
+    if token:
+        headers["authorization"] = f"Bearer {token}"
+    return headers
+
+
+def extract_policy_resource(sign_cookie: str | None) -> str | None:
+    if not sign_cookie:
+        return None
+    m_edge = re.search(r"Edge-Cache-Cookie=urlprefix=([^:;\s]+)", sign_cookie)
+    if m_edge:
+        try:
+            decoded = _b64decode(m_edge.group(1)).decode("utf-8").rstrip("/")
+            return decoded + "/index.mpd"
+        except Exception:
+            pass
+    m_cf = re.search(r"CloudFront-Policy=([^;]+)", sign_cookie)
+    if m_cf:
+        raw = m_cf.group(1)
+        for t in ("cf", "std"):
+            try:
+                b = raw.replace("-", "+").replace("_", "=") if t == "cf" else raw
+                b += "=" * (-len(b) % 4)
+                data = json.loads(base64.b64decode(b).decode("utf-8"))
+                for s in data.get("Statement", []):
+                    res = s.get("Resource")
+                    if res:
+                        return res.rstrip("*").rstrip("/") + "/index.mpd"
+            except Exception:
+                pass
+    return None
+
+
+async def _native_streams(subject_id: str, season: int = 0, episode: int = 0) -> list:
+    """Fetch additional streams from the native mobile endpoint. Returns
+    streams from alternate CDN hosts (macdn.aoneroom.com etc.) which may not
+    be throttled the same way as bcdnxw.hakunaymatata.com. Best-effort."""
+    try:
+        device_id = generate_device_id()
+        bootstrap_url = "https://apig.inmoviebox.com/wefeed-mobile-bff/tab/ranking-list?tabId=0&categoryType=4516404531735022304&page=1&perPage=1"
+        headers = build_auth_headers("GET", bootstrap_url, device_id=device_id)
+        async with _new_session(20) as client:
+            resp = await client.get(bootstrap_url, headers=headers)
+            token = None
+            if resp.status_code == 200:
+                x_user = resp.headers.get("x-user")
+                if x_user:
+                    try:
+                        token = json.loads(x_user).get("token")
+                    except Exception:
+                        token = None
+            play_url = f"{NATIVE_API_BASE}/wefeed-mobile-bff/subject-api/play-info?subjectId={subject_id}&se={season}&ep={episode}"
+            headers = build_auth_headers("GET", play_url, token=token, device_id=device_id)
+            resp = await client.get(play_url, headers=headers, timeout=20)
+            if resp.status_code != 200:
+                return []
+            data = resp.json().get("data", {})
+            out = []
+            seen = set()
+            for st in data.get("streams", []):
+                raw_url = st.get("url")
+                if not raw_url:
+                    continue
+                cookie = st.get("signCookie")
+                policy_url = extract_policy_resource(cookie) if cookie else None
+                final_url = policy_url or raw_url
+                if final_url in seen:
+                    continue
+                seen.add(final_url)
+                res_str = str(st.get("resolutions", ""))
+                quality_val = 0
+                for q in (2160, 1440, 1080, 720, 480, 360, 240):
+                    if str(q) in res_str:
+                        quality_val = q
+                        break
+                size_bytes = int(st.get("size") or 0)
+                out.append({
+                    "resolution": f"{quality_val}p" if quality_val else (res_str or "Default"),
+                    "format": "DASH" if (policy_url or ".mpd" in (final_url or "")) else st.get("format", "MP4"),
+                    "url": final_url,
+                    "size": str(size_bytes),
+                    "duration": st.get("duration"),
+                    "codec": st.get("codecName"),
+                })
+            return out
+    except Exception:
+        return []
+
+
+
+
 @app.get("/api/stream/{subject_id}")
+
 async def get_stream_sources(request: Request, subject_id: str, detail_path: str, se: int = 1, ep: int = 1):
     ip = _client_ip(request)
     # Step 1: get the player domain (cached so we don't hit get-domain every call)
@@ -1020,7 +1241,7 @@ async def get_stream_sources(request: Request, subject_id: str, detail_path: str
     )
     play_url = f"{domain}/wefeed-h5api-bff/subject/play?subjectId={subject_id}&se={se}&ep={ep}&detailPath={detail_path}"
 
-    async with httpx.AsyncClient(follow_redirects=True, timeout=25) as client:
+    async with _new_session(25) as client:
         # Retry on transient upstream failures (5xx) AND rate-limits (429),
         # with a short backoff. One flaky call shouldn't kill the whole movie.
         resp = None
@@ -1051,6 +1272,30 @@ async def get_stream_sources(request: Request, subject_id: str, detail_path: str
         }
         for s in data.get("streams", [])
     ]
+    # Tier-1 mirror support: pull additional streams from the native mobile
+    # endpoint (macdn.aoneroom.com / CloudFront). These use a different CDN
+    # host and rate-limit bucket, so they keep working when bcdnxw is throttled.
+    try:
+        native = await _native_streams(subject_id, se, ep)
+        seen_urls = {s.get("url") for s in streams if s.get("url")}
+        # Interleave native (macdn/CloudFront) mirrors right after their
+        # web (bcdnxw) counterpart per quality, so a throttled primary host
+        # falls through to the mirror quickly instead of trying every
+        # quality on the primary first.
+        by_quality: dict = {}
+        for s in streams:
+            by_quality.setdefault(s.get("resolution"), []).append(s)
+        for ns in native:
+            if ns.get("url") and ns["url"] not in seen_urls:
+                seen_urls.add(ns["url"])
+                by_quality.setdefault(ns.get("resolution"), []).append(ns)
+        # Flatten: highest quality first, primary then mirror per quality.
+        merged = []
+        for q in sorted(by_quality.keys(), key=lambda x: int("".join(c for c in str(x) if c.isdigit()) or 0), reverse=True):
+            merged.extend(by_quality[q])
+        streams = merged
+    except Exception:
+        pass
     # Rewrite every CDN url to go through the backend proxy so the browser's
     # localhost Referer is never sent to the CDN (which now 429s it). See the
     # media-proxy header above for the full explanation.

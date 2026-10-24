@@ -139,9 +139,10 @@ function createWindow(): void {
     (details, callback) => {
       try {
         const host = new URL(details.url).hostname;
-        if (host.includes("hakunaymatata.com") || host.includes("b-cdn.net") || host.includes("aoneroom.com") || host.startsWith("bcdn")) {
-          details.requestHeaders["Referer"] = "https://moviebox.ph/";
-          details.requestHeaders["Origin"] = "https://moviebox.ph";
+        const isAoneroom = host.includes("aoneroom.com") || host.includes("macdn.");
+        if (host.includes("hakunaymatata.com") || host.includes("b-cdn.net") || isAoneroom || host.startsWith("bcdn")) {
+          details.requestHeaders["Referer"] = isAoneroom ? "https://api3.aoneroom.com/" : "https://moviebox.ph/";
+          details.requestHeaders["Origin"] = isAoneroom ? "https://api3.aoneroom.com" : "https://moviebox.ph";
         }
       } catch {}
       callback({ requestHeaders: details.requestHeaders });

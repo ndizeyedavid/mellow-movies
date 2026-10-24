@@ -10,6 +10,8 @@ import Titlebar from "./components/desktop/Titlebar";
 import Sidebar from "./components/desktop/Sidebar";
 import UpdateModal from "./components/desktop/UpdateModal";
 import ChangelogModal from "./components/desktop/ChangelogModal";
+import MiniPlayer from "./components/desktop/MiniPlayer";
+import { MiniPlayerProvider } from "./context/MiniPlayerContext";
 import Toast from "./components/ui/Toast";
 import { showToast } from "./utils/toast";
 import NavProgress from "./components/ui/NavProgress";
@@ -171,8 +173,11 @@ function Layout() {
 export default function App() {
   return (
     <HashRouter>
-      <ScrollToTop />
-      <Layout />
+      <MiniPlayerProvider>
+        <ScrollToTop />
+        <Layout />
+        <MiniPlayer />
+      </MiniPlayerProvider>
     </HashRouter>
   );
 }
