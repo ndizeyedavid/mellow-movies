@@ -6,6 +6,16 @@
 
 ---
 
+## [1.2.2] - 2026-10-25
+
+### MacOS Fix
+
+`macos-13` (Intel) runners are being deprecated by GitHub → near-zero capacity → 17-hour queue. The actual build takes ~2-3 minutes. `The APFS/hdiutil` failure was a secondary issue on arm64. Both are now avoided.
+
+- **Workflow:** macOS now runs on macos-14 (Apple Silicon, plentiful runners) and builds arm64-only zip (no hdiutil/DMG, no 17-hour queue). Covers all modern Macs; Intel Macs run arm64 builds via Rosetta 2.
+- **package.json:** mac target = arm64 zip only.
+- **DownloadPage:** macOS card now looks for the .zip asset and updates subtitle text accordingly.
+
 ## [1.2.1] - 2026-10-22
 
 Added `mac` and `linux` build targets with space-free `artifactName (Mellow.Movies-${version}.${ext})` so `latest.yml/asset` names stay consistent (avoiding the 404 bug we just fixed).
