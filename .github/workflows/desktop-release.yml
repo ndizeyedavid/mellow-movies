@@ -93,7 +93,7 @@ jobs:
             git push origin HEAD:main
           } else { Write-Host "package.json already at $version" }
 
-  build:
+  build-core:
     needs: [parse-version, sync-version]
     if: needs.parse-version.outputs.skip == 'false'
     strategy:
@@ -102,8 +102,6 @@ jobs:
         include:
           - os: windows-latest
             platform: win
-          - os: macos-13
-            platform: mac
           - os: ubuntu-latest
             platform: linux
     runs-on: ${{ matrix.os }}
@@ -144,8 +142,47 @@ jobs:
             desktop/dist/*.blockmap
           if-no-files-found: ignore
 
+  build-mac:
+    needs: [parse-version, sync-version]
+    if: needs.parse-version.outputs.skip == 'false'
+    runs-on: macos-13
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install desktop deps
+        working-directory: desktop
+        run: npm ci
+
+      - name: Build desktop
+        working-directory: desktop
+        run: npm run build
+
+      - name: Package (mac)
+        working-directory: desktop
+        run: npx electron-builder --mac --config --publish never
+
+      - name: Upload artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-mac
+          path: |
+            desktop/dist/*.dmg
+            desktop/dist/*.zip
+            desktop/dist/*.blockmap
+          if-no-files-found: ignore
+
   release:
-    needs: [parse-version, build]
+    needs: [parse-version, build-core, build-mac]
     if: needs.parse-version.outputs.skip == 'false'
     runs-on: ubuntu-latest
     steps:

@@ -110,6 +110,9 @@ export default function StreamPlayer({
   // Guard so onHardFailure is invoked only once per candidate set.
   const hardFailureCalledRef = useRef(false);
   const lastHardFailureRef = useRef(0);
+  // Prevents the stall watchdog / retry ladder from re-entering tryNextSource
+  // while an advance is already scheduled (which caused the reset-to-0 loop).
+  const advancingRef = useRef(false);
   // Last time the playhead advanced — the stall watchdog uses this to tell a
   // stream that's truly dead mid-playback from a brief recoverable blip.
   const lastProgressRef = useRef(0);
@@ -257,8 +260,15 @@ export default function StreamPlayer({
   /** Advance to the next candidate source, or surface a fatal error when the
    *  list is exhausted. Used when a source exhausts its retries or stalls. */
   const tryNextSource = useCallback(() => {
+    if (advancingRef.current) return;
+    advancingRef.current = true;
     retryCountRef.current = 0;
-    pendingSeekRef.current = null;
+    const v = videoRef.current;
+    if (v && Number.isFinite(v.currentTime) && v.currentTime > 1) {
+      pendingSeekRef.current = v.currentTime;
+    } else {
+      pendingSeekRef.current = null;
+    }
     setUseHlsFallback(false);
     lastProgressRef.current = Date.now();
     if (srcIndex + 1 >= srcs.length) {
@@ -266,19 +276,21 @@ export default function StreamPlayer({
       setWaiting(false);
       if (!hardFailureCalledRef.current && onHardFailure) {
         const now = Date.now();
-        // Only re-resolve once per 60s — rapid re-fetches just re-trigger
-        // the CDN rate limit and make things worse.
         if (now - lastHardFailureRef.current > 60000) {
           lastHardFailureRef.current = now;
           hardFailureCalledRef.current = true;
-          // Delay the re-resolve so the CDN has time to cool down.
           setTimeout(() => onHardFailure(), 15000);
         }
       }
+      // Allow future retries after the error screen is shown.
+      setTimeout(() => { advancingRef.current = false; }, 1000);
     } else {
       // Pause before fetching the next candidate to avoid hammering the CDN.
       setWaiting(true);
-      setTimeout(() => setSrcIndex((i) => i + 1), 2000);
+      setTimeout(() => {
+        setSrcIndex((i) => i + 1);
+        advancingRef.current = false;
+      }, 2000);
     }
   }, [srcIndex, srcs.length, onHardFailure]);
 
@@ -418,6 +430,7 @@ export default function StreamPlayer({
     startedRef.current = false;
     hlsNetRetryRef.current = 0;
     hardFailureCalledRef.current = false;
+    advancingRef.current = false;
 
     const onMetadata = () => {
       setDuration(video.duration || 0);
@@ -451,6 +464,11 @@ export default function StreamPlayer({
       if (startedRef.current) return;
       const retries = retryCountRef.current;
       if (retries < RETRY_DELAYS.length) {
+        // Keep the current position so the retry doesn't restart from 0.
+        const v = videoRef.current;
+        if (v && Number.isFinite(v.currentTime) && v.currentTime > 1) {
+          pendingSeekRef.current = v.currentTime;
+        }
         retryCountRef.current = retries + 1;
         setWaiting(true);
         window.setTimeout(() => setReloadKey((k) => k + 1), RETRY_DELAYS[retries]);

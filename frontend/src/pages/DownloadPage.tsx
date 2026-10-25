@@ -225,7 +225,7 @@ export default function DownloadPage() {
             title="Linux"
             subtitle="Ubuntu / Fedora · AppImage / deb"
             icon={<FaLinux />}
-            available={true}
+            available={!!linuxAppImage || !!linuxDeb}
             downloadUrl={
               linuxAppImage?.browser_download_url ||
               linuxDeb?.browser_download_url ||
@@ -244,7 +244,7 @@ export default function DownloadPage() {
             title="macOS"
             subtitle="macOS 13+ · Intel + Apple Silicon (dmg / zip)"
             icon={<FaApple />}
-            available={true}
+            available={!!macDmg || !!macZip}
             downloadUrl={
               macDmg?.browser_download_url ||
               macZip?.browser_download_url ||
