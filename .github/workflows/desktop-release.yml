@@ -134,7 +134,6 @@ jobs:
           name: desktop-${{ matrix.platform }}
           path: |
             desktop/dist/*.exe
-            desktop/dist/*.dmg
             desktop/dist/*.zip
             desktop/dist/*.AppImage
             desktop/dist/*.deb
@@ -145,7 +144,7 @@ jobs:
   build-mac:
     needs: [parse-version, sync-version]
     if: needs.parse-version.outputs.skip == 'false'
-    runs-on: macos-13
+    runs-on: macos-14
     continue-on-error: true
     steps:
       - name: Checkout
@@ -176,7 +175,6 @@ jobs:
         with:
           name: desktop-mac
           path: |
-            desktop/dist/*.dmg
             desktop/dist/*.zip
             desktop/dist/*.blockmap
           if-no-files-found: ignore

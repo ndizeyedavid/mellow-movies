@@ -139,7 +139,6 @@ export default function DownloadPage() {
 
   // Find assets per platform from the latest release.
   const winSetup = release?.assets.find((a) => /Setup.*\.exe$/i.test(a.name));
-  const macDmg = release?.assets.find((a) => /\.dmg$/i.test(a.name));
   const macZip = release?.assets.find((a) => /\.zip$/i.test(a.name));
   const linuxAppImage = release?.assets.find((a) => /\.AppImage$/i.test(a.name));
   const linuxDeb = release?.assets.find((a) => /\.deb$/i.test(a.name));
@@ -242,18 +241,15 @@ export default function DownloadPage() {
           />
           <PlatformCard
             title="macOS"
-            subtitle="macOS 13+ · Intel + Apple Silicon (dmg / zip)"
+            subtitle="macOS 11+ · Apple Silicon (zip, runs on Intel via Rosetta)"
             icon={<FaApple />}
-            available={!!macDmg || !!macZip}
+            available={!!macZip}
             downloadUrl={
-              macDmg?.browser_download_url ||
               macZip?.browser_download_url ||
-              `https://github.com/${REPO}/releases/latest/download/Mellow.Movies.${version}.dmg`
+              `https://github.com/${REPO}/releases/latest/download/Mellow.Movies.${version}.zip`
             }
-            fileName={
-              macDmg?.name || macZip?.name || `Mellow Movies ${version}.dmg`
-            }
-            size={macDmg?.size || macZip?.size}
+            fileName={macZip?.name || `Mellow Movies ${version}.zip`}
+            size={macZip?.size}
             version={`v${version}`}
             badge="Available"
           />
